@@ -15,6 +15,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit.errors import StreamlitSecretNotFoundError
 
 from impact import player_impact
 from src.uaefa_scraper.drive_sync import DriveSyncError, settings_from_mapping, sync_runtime_snapshot
@@ -26,8 +27,12 @@ SEASON_DATA_ROOT = PROJECT_ROOT / "data" / "processed" / "first_division_2026_20
 
 def drive_settings():
     """Read optional deployment secrets without exposing them in the UI or Git."""
-    if "drive" in st.secrets:
-        return settings_from_mapping(dict(st.secrets["drive"]))
+    try:
+        if "drive" in st.secrets:
+            return settings_from_mapping(dict(st.secrets["drive"]))
+    except StreamlitSecretNotFoundError:
+        # A local installation deliberately has no secrets file until Drive is enabled.
+        pass
     return settings_from_mapping()
 
 
@@ -239,7 +244,20 @@ def load_data() -> dict[str, pd.DataFrame]:
         validated_profiles_path if validated_profiles_path.exists()
         else EXTERNAL_ROOT / "player_profiles.parquet"
     )
-    if crosswalk_path.exists() and besoccer_profiles_path.exists():
+    if validated_profiles_path.exists():
+        # This file has already passed the UAEFA identity checks. It can retain
+        # verified historic players even after they leave a current squad page.
+        enrichment = pd.read_parquet(validated_profiles_path).copy()
+        enrichment["player_id"] = enrichment["uaefa_player_id"].astype(str)
+        enrichment = enrichment[
+            [
+                "player_id", "market_value_current_eur", "market_value_history_json",
+                "elo_current", "elo_history_json", "position_main", "positions_secondary_json",
+            ]
+        ]
+        frames["players"] = frames["players"].merge(enrichment, on="player_id", how="left")
+    elif crosswalk_path.exists() and besoccer_profiles_path.exists():
+        # Legacy fallback for a local dataset created before the validated file.
         crosswalk = pd.read_parquet(crosswalk_path)
         approved = crosswalk[
             crosswalk["identity_validation"].isin(
