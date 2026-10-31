@@ -1,0 +1,27 @@
+# Local secrets and Streamlit deployment configuration
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Downloaded source data, generated assets and private local exports
+/data/
+/output/
+/share/
+/logs/
+/tmp/
+
+# Generated static snapshots and local API captures
+/al_wasl_uae_snapshot_*.html
+/index.html
+/match_report_*.json
+
+# Python and operating-system artefacts
+__pycache__/
+*.py[cod]
+.DS_Store
+.ipynb_checkpoints/
+
+# Local virtual environments
+.venv/
+venv/

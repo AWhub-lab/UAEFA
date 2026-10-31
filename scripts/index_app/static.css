@@ -1,0 +1,36 @@
+/* ===== static edition: native <details> instead of JavaScript, images as shared CSS classes ===== */
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+.imc{display:inline-block;flex:none;background-repeat:no-repeat;background-position:center;background-size:contain}
+.crest.imc{width:var(--s);height:var(--s);filter:drop-shadow(0 3px 6px rgba(0,0,0,.25))}
+.imp{position:absolute;inset:0;display:block;background-repeat:no-repeat;background-position:top center;background-size:cover}
+.ph.round .imp{transform:scale(1.25);transform-origin:50% 18%}
+.brandlogo{width:46px;height:46px}.footer .brandlogo{width:34px;height:34px}
+.watermark.imc{width:120px;height:120px;position:relative;z-index:1}
+.snav{margin:1rem 0 0;max-width:100%;overflow-x:auto;white-space:nowrap}
+.snav a{flex:none}
+.wrap section{margin-top:.4rem;scroll-margin-top:72px}
+summary{list-style:none;cursor:pointer}summary::-webkit-details-marker{display:none}
+.chev{flex:none;display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--yellow);color:#fff;font-size:.75rem;transition:transform .2s}
+details[open]>summary>.chev{transform:rotate(90deg)}
+.wdet,.tdet,.cdet{margin-top:.7rem;border:1px solid var(--line);border-radius:18px;background:var(--s1);overflow:hidden}
+.wdet>summary,.tdet>summary,.cdet>summary{display:flex;align-items:center;gap:.8rem;padding:.8rem 1rem;background:linear-gradient(90deg,rgba(255,210,31,.1),transparent 60%);font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;flex-wrap:wrap}
+.wdet>summary small{margin-left:auto;color:var(--muted);font-family:'Inter',sans-serif;font-size:.72rem;letter-spacing:.1em;font-weight:600}
+.tdet>summary b,.cdet>summary b{font-weight:800}
+.wdet>.match-list{padding:.6rem}
+.mdet{margin:.2rem 0 .6rem}.mdet>summary .match-row{margin:0}
+.rbody{padding:0 1rem 1.2rem}
+.cdet>.rbody{padding-top:.2rem}
+.pdet{margin:.55rem 0}.pdet>summary{max-width:640px}.pdet>summary .pcard{margin:0}
+.pdet[open]>summary .pcard{border-color:var(--yellow);box-shadow:0 0 0 1px var(--yellow)}
+.pdet>.rbody{padding:.8rem 0 1.6rem}
+.sdet{margin:.5rem 0;border:1px solid var(--line);border-radius:14px;background:var(--s1);overflow:hidden}
+.sdet>summary{padding:.6rem 1rem;font-weight:700;font-size:.85rem;letter-spacing:.04em;display:flex;align-items:center;gap:.6rem}
+.sdet>summary::before{content:"▸";color:var(--yellow);transition:transform .2s}
+.sdet[open]>summary::before{transform:rotate(90deg)}
+.sdet>*:not(summary){margin:.2rem .8rem .8rem}
+.nojs{margin-top:1rem}
+@media (max-width:760px){
+ .wrap{padding:0 1rem 3rem}.snav{display:flex!important;margin:.8rem 0 0}.snav a{padding:.6rem .9rem}
+ .wdet>summary,.tdet>summary,.cdet>summary{font-size:1.15rem}.rbody{padding:0 .6rem 1rem}
+ .grid.g5.rk{--cols:1!important}
+}
