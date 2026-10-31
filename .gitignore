@@ -15,6 +15,7 @@
 /al_wasl_uae_snapshot_*.html
 /index.html
 /match_report_*.json
+/Abrir UAE First Division.command
 
 # Python and operating-system artefacts
 __pycache__/
