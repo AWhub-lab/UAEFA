@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
 from functools import lru_cache
 from html import escape
@@ -16,10 +17,42 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from impact import player_impact
+from src.uaefa_scraper.drive_sync import DriveSyncError, settings_from_mapping, sync_runtime_snapshot
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SEASON_DATA_ROOT = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027"
+
+
+def drive_settings():
+    """Read optional deployment secrets without exposing them in the UI or Git."""
+    if "drive" in st.secrets:
+        return settings_from_mapping(dict(st.secrets["drive"]))
+    return settings_from_mapping()
+
+
+def local_snapshot_available() -> bool:
+    required = ["matches", "clubs", "players", "appearances", "events", "staff"]
+    current = SEASON_DATA_ROOT / "current"
+    return all((current / f"{name}.parquet").exists() for name in required)
+
+
+def ensure_runtime_snapshot(force: bool = False) -> dict[str, object] | None:
+    """Bootstrap a deployed app from Drive, while keeping local use offline-first."""
+    settings = drive_settings()
+    if not settings or (local_snapshot_available() and not force):
+        return None
+    return sync_runtime_snapshot(PROJECT_ROOT, settings)
+
+
+# Git deliberately excludes data. A hosted app receives its approved snapshot
+# from Drive on first start; local work remains fully usable without Drive.
+try:
+    ensure_runtime_snapshot()
+except DriveSyncError:
+    # The regular missing-data message remains useful in a new local checkout.
+    pass
+
 # ``current`` is rebuilt by the incremental synchroniser. Keep the pilot as a
 # fallback so the viewer remains usable before the first full synchronisation.
 DATA_ROOT = SEASON_DATA_ROOT / "current" if (SEASON_DATA_ROOT / "current").exists() else SEASON_DATA_ROOT / "week_01"
@@ -2313,6 +2346,12 @@ def main() -> None:
                 st.session_state["matchday"] = available_weeks[available_weeks.index(st.session_state["matchday"]) + 1]
                 st.rerun()
     if refresh.button(f"↻ {t('Actualizar datos')}", key="reload", type="primary", use_container_width=True):
+        try:
+            remote = ensure_runtime_snapshot(force=True)
+            if remote:
+                st.toast(f"Drive: {remote.get('downloaded', 0)} files synchronized", icon="☁️")
+        except DriveSyncError as exc:
+            st.warning(f"Drive update unavailable: {exc}")
         st.cache_data.clear()
         st.rerun()
     language_control.selectbox(

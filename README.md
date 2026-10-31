@@ -99,3 +99,37 @@ sin filtros. La ficha completa (impacto, temporada, acciones) se incluye para lo
 270' o más; el resto lleva identidad y datos básicos. Hay una variante `_lite_` sin fichas completas.
 Requiere Node.js para dibujarla.
 
+## Google Drive and hosted app
+
+GitHub contains the code only. Raw UAEFA responses, Parquet tables, player
+portraits, crests, generated reports and all secrets remain outside the
+repository. Google Drive is the controlled storage layer for the current
+published snapshot and historical source files.
+
+1. Create a Google Cloud service account and enable the Google Drive API.
+2. Share the `UAE First Division Intelligence` Drive folder with that service
+   account. Give it `Editor` access for the publishing job and `Viewer` access
+   for the hosted app.
+3. Store `GOOGLE_DRIVE_ROOT_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON` in a local
+   `.env` file for the update machine. Start from `.env.example`; never commit
+   the real file.
+4. After a successful, rate-limited UAEFA/BeSoccer update, publish only
+   changed files:
+
+```bash
+set -a; source .env; set +a
+python3 scripts/publish_to_drive.py
+```
+
+5. In Streamlit hosting, add the same values as secrets:
+
+```toml
+[drive]
+root_folder_id = "your-drive-root-folder-id"
+service_account_json = '''{"type":"service_account", ...}'''
+```
+
+The deployed app downloads the approved Drive snapshot only when it does not
+exist locally. The visible `Refresh data` button checks Drive again and then
+clears Streamlit's data cache.
+
