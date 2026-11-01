@@ -288,7 +288,13 @@ def to_number(series: pd.Series) -> pd.Series:
 
 
 @st.cache_data(show_spinner=False)
-def load_data() -> dict[str, pd.DataFrame]:
+def load_data(competition_key: str) -> dict[str, pd.DataFrame]:
+    """Load a snapshot with the competition key in Streamlit's cache key."""
+    # ``competition_key`` is intentionally part of the function signature.
+    # Without it, switching the selector could render the previous league from
+    # Streamlit's process-wide data cache.
+    if competition_key != ACTIVE_COMPETITION.key:
+        raise ValueError("The requested competition does not match the active snapshot.")
     required = ["matches", "clubs", "players", "appearances", "events", "staff"]
     missing = [name for name in required if not (DATA_ROOT / f"{name}.parquet").exists()]
     if missing:
@@ -2478,7 +2484,7 @@ def main() -> None:
     st.html(CSS)
     scroll_to_top_if_needed()
     try:
-        season_data = load_data()
+        season_data = load_data(ACTIVE_COMPETITION.key)
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()

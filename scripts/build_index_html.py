@@ -77,7 +77,7 @@ def history(raw: object) -> list[dict]:
 
 
 def build() -> tuple[dict, dict[str, str]]:
-    data = app.load_data()
+    data = app.load_data(app.ACTIVE_COMPETITION.key)
     images: dict[str, str] = {"alwasl": uri(app.BRAND_ROOT / "al_wasl.png", "crest")}
 
     clubs = []
