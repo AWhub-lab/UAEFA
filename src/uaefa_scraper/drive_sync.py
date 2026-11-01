@@ -420,3 +420,71 @@ def sync_runtime_snapshot(project_root: Path, settings: DriveSettings) -> dict[s
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"downloaded": downloaded, "published_at": manifest.get("published_at")}
+
+
+def sync_competition_snapshot(
+    project_root: Path,
+    settings: DriveSettings,
+    directory: str,
+) -> dict[str, Any]:
+    """Download one competition published through the isolated Drive layout.
+
+    New competitions never overwrite the established First Division snapshot.
+    Each one has its own tables and optional media archive, allowing the hosted
+    application to cache only the competition a scout opens.
+    """
+    service = service_from_settings(settings)
+    tables_id = find_path(
+        service,
+        settings.root_folder_id,
+        ["02_Processed data", "competitions", directory, "current", "tables"],
+    )
+    if not tables_id:
+        raise DriveSyncError(f"No published snapshot found for {directory}.")
+
+    marker = project_root / "data" / ".drive_competition_manifests" / f"{directory}.json"
+    try:
+        local_manifest = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        local_manifest = {}
+    manifest_entry = find_child(service, tables_id, "drive_manifest.json")
+    remote_manifest_data: dict[str, Any] = {}
+    if manifest_entry:
+        remote_manifest_data = json.loads(
+            service.files().get_media(fileId=manifest_entry["id"]).execute().decode("utf-8")
+        )
+    remote_hashes = {
+        entry["path"]: entry["sha256"] for entry in remote_manifest_data.get("files", [])
+    }
+    local_hashes = {entry["path"]: entry["sha256"] for entry in local_manifest.get("files", [])}
+    # The manifest sits beside tables, not inside the local snapshot itself.
+    downloaded = download_tree(
+        service,
+        tables_id,
+        project_root / "data" / "processed" / directory / "current",
+        "tables",
+        remote_hashes,
+        local_hashes,
+    )
+
+    media_folder = find_path(
+        service, settings.root_folder_id, ["03_Assets", "competitions", directory]
+    )
+    if media_folder:
+        bundle = find_child(service, media_folder, f"{directory}_media.zip")
+        if bundle:
+            local_bundle = project_root / "tmp" / f"{directory}_media.zip"
+            # Media archives are immutable by hash in the publisher manifest.
+            bundle_changed = remote_manifest_data.get("media_bundle", {}).get("sha256") != local_manifest.get("media_bundle", {}).get("sha256")
+            if bundle_changed or not local_bundle.exists():
+                download_file(service, bundle["id"], local_bundle)
+                # Competition bundles are rooted at their asset directory
+                # (clubs/, players/), unlike the legacy all-project archive.
+                extract_runtime_media_bundle(
+                    local_bundle, project_root / "data" / "assets" / directory
+                )
+                downloaded += 1
+
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps(remote_manifest_data, indent=2), encoding="utf-8")
+    return {"downloaded": downloaded, "published_at": remote_manifest_data.get("published_at")}

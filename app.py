@@ -19,11 +19,29 @@ import streamlit.components.v1 as components
 from streamlit.errors import StreamlitSecretNotFoundError
 
 from impact import player_impact
-from src.uaefa_scraper.drive_sync import DriveSyncError, settings_from_mapping, sync_runtime_snapshot
+from src.uaefa_scraper.competitions import COMPETITIONS, get_competition
+from src.uaefa_scraper.drive_sync import (
+    DriveSyncError,
+    settings_from_mapping,
+    sync_competition_snapshot,
+    sync_runtime_snapshot,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-SEASON_DATA_ROOT = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027"
+
+
+def active_competition_key() -> str:
+    """Read the selected competition before its data snapshot is loaded."""
+    try:
+        key = str(st.session_state.get("competition_key", "first"))
+    except Exception:  # Streamlit's static HTML builder imports this module too.
+        key = "first"
+    return key if key in COMPETITIONS else "first"
+
+
+ACTIVE_COMPETITION = get_competition(active_competition_key())
+SEASON_DATA_ROOT = PROJECT_ROOT / "data" / "processed" / ACTIVE_COMPETITION.directory
 
 
 def drive_settings():
@@ -48,7 +66,9 @@ def ensure_runtime_snapshot(force: bool = False) -> dict[str, object] | None:
     settings = drive_settings()
     if not settings or (local_snapshot_available() and not force):
         return None
-    return sync_runtime_snapshot(PROJECT_ROOT, settings)
+    if ACTIVE_COMPETITION.key == "first":
+        return sync_runtime_snapshot(PROJECT_ROOT, settings)
+    return sync_competition_snapshot(PROJECT_ROOT, settings, ACTIVE_COMPETITION.directory)
 
 
 def configured_app_password() -> str:
@@ -111,11 +131,11 @@ except DriveSyncError:
 # ``current`` is rebuilt by the incremental synchroniser. Keep the pilot as a
 # fallback so the viewer remains usable before the first full synchronisation.
 DATA_ROOT = SEASON_DATA_ROOT / "current" if (SEASON_DATA_ROOT / "current").exists() else SEASON_DATA_ROOT / "week_01"
-EXTERNAL_ROOT = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
+EXTERNAL_ROOT = PROJECT_ROOT / "data" / "external" / "besoccer" / ACTIVE_COMPETITION.directory
 BRAND_ROOT = PROJECT_ROOT / "data" / "assets" / "brand"
-COMPETITION_REPORT_PATH = PROJECT_ROOT / "output" / "pdf" / "uae_first_division_category_board_report_en.pdf"
+COMPETITION_REPORT_PATH = PROJECT_ROOT / "output" / "pdf" / ACTIVE_COMPETITION.report_path
 
-SEASON = "2026/27"
+SEASON = ACTIVE_COMPETITION.season
 PAGES = {
     "Clasificación": ("01", ":material/leaderboard:", "Clasificación y goleadores de la jornada"),
     "Partidos": ("02", ":material/stadium:", "Actas, alineaciones y cronología de cada partido"),
@@ -1116,7 +1136,7 @@ def brand_bar(page: str, detail: str | None) -> None:
     BAR_SLOT[0].html(
         f"""<div class='brandbar'>
         <div class='brand-left'><img src='{brand_uri("al_wasl.png")}' alt='Al Wasl'>
-        <div><div class='brand-title'>Al Wasl <b>·</b> First Division Hub</div><div class='brand-sub'>UAE First Division · {t("Temporada")} {SEASON}</div></div></div>
+        <div><div class='brand-title'>Al Wasl <b>·</b> {escape(ACTIVE_COMPETITION.name)} Hub</div><div class='brand-sub'>{escape(ACTIVE_COMPETITION.name)} · {t("Temporada")} {SEASON}</div></div></div>
         <div class='brand-right'><div class='here'><i></i>{escape(here)}</div></div>
         </div>""".replace("\n", "")
     )
