@@ -101,20 +101,23 @@ Requiere Node.js para dibujarla.
 
 ## Google Drive and hosted app
 
-GitHub contains the code only. Raw UAEFA responses, Parquet tables, player
-portraits, crests, generated reports and all secrets remain outside the
-repository. Google Drive is the controlled storage layer for the current
-published snapshot and historical source files.
+GitHub contains the code and deployment configuration only. Raw UAEFA
+responses, local source data, original player portraits, generated reports and
+all secrets remain outside the repository. Google Drive is the controlled
+storage layer for the minimum current snapshot required by the hosted app.
 
 1. Create a Google Cloud service account and enable the Google Drive API.
 2. Share the `UAE First Division Intelligence` Drive folder with that service
-   account. Give it `Editor` access for the publishing job and `Viewer` access
-   for the hosted app.
+   account as `Viewer`. Publishing is performed from the data owner's local
+   Google account through OAuth, because service accounts do not have My Drive
+   storage quota.
 3. Store `GOOGLE_DRIVE_ROOT_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON` in a local
    `.env` file for the update machine. Start from `.env.example`; never commit
    the real file.
-4. After a successful, rate-limited UAEFA/BeSoccer update, publish only
-   changed files:
+4. After a successful, rate-limited UAEFA/BeSoccer update, publish the compact
+   runtime snapshot. It contains only current Parquet tables, validated
+   enrichment tables, and one optimized archive with club crests, player
+   portraits, the Al Wasl mark and the downloadable PDF report:
 
 ```bash
 set -a; source .env; set +a
@@ -131,5 +134,6 @@ service_account_json = '''{"type":"service_account", ...}'''
 
 The deployed app downloads the approved Drive snapshot only when it does not
 exist locally. The visible `Refresh data` button checks Drive again and then
-clears Streamlit's data cache.
+clears Streamlit's data cache. The report is served to the user's browser only
+after they choose the in-app download button.
 

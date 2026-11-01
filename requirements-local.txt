@@ -1,0 +1,6 @@
+# Local acquisition and publication tooling. The hosted app installs only
+# requirements.txt, which intentionally excludes scraping dependencies.
+-r requirements.txt
+requests>=2.32,<3
+lxml>=5.2,<7
+google-auth-oauthlib>=1.2,<2

@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import os
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -113,6 +114,57 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def build_runtime_media_bundle(project_root: Path) -> Path:
+    """Create a compact archive with the visual resources required at runtime."""
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - dependency configuration failure
+        raise DriveSyncError("Pillow is required to build the deployment media bundle.") from exc
+
+    bundle_path = project_root / "tmp" / "uae_first_division_runtime_media.zip"
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    club_root = project_root / "data" / "assets" / "first_division_2026_2027" / "clubs"
+    player_root = project_root / "data" / "assets" / "first_division_2026_2027" / "players"
+    club_archive_root = Path("data/assets/first_division_2026_2027/clubs")
+    player_archive_root = Path("data/assets/first_division_2026_2027/players")
+    report = project_root / "output" / "pdf" / "uae_first_division_category_board_report_en.pdf"
+    brand = project_root / "data" / "assets" / "brand" / "al_wasl.png"
+    with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        # Crests are tiny and preserve their transparent source format.
+        if club_root.exists():
+            for source in sorted(path for path in club_root.rglob("*") if path.is_file()):
+                archive.write(source, (club_archive_root / source.relative_to(club_root)).as_posix())
+        # The local originals remain untouched. The hosted copy uses compact JPEG
+        # portraits, while app.py transparently falls back from .png to .jpg.
+        if player_root.exists():
+            for source in sorted(path for path in player_root.rglob("*") if path.is_file()):
+                with Image.open(source) as image:
+                    image = image.convert("RGB")
+                    image.thumbnail((300, 400), Image.Resampling.LANCZOS)
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="JPEG", quality=82, optimize=True, progressive=True)
+                archive.writestr(
+                    (player_archive_root / source.relative_to(player_root)).with_suffix(".jpg").as_posix(),
+                    buffer.getvalue(),
+                )
+        if brand.exists():
+            archive.write(brand, "data/assets/brand/al_wasl.png")
+        if report.exists():
+            archive.write(report, "output/pdf/uae_first_division_category_board_report_en.pdf")
+    return bundle_path
+
+
+def extract_runtime_media_bundle(bundle_path: Path, project_root: Path) -> None:
+    """Extract our own runtime archive without allowing paths outside the project."""
+    destination = project_root.resolve()
+    with zipfile.ZipFile(bundle_path) as archive:
+        for item in archive.infolist():
+            target = (destination / item.filename).resolve()
+            if destination not in target.parents and target != destination:
+                raise DriveSyncError("Runtime media archive contains an invalid path.")
+        archive.extractall(destination)
 
 
 def _escape_query(value: str) -> str:
@@ -290,8 +342,7 @@ def publish_project_snapshot(
     service = service or service_from_settings(settings)
     processed_current = project_root / "data" / "processed" / "first_division_2026_2027" / "current"
     external = project_root / "data" / "external" / "besoccer" / "first_division_2026_2027"
-    assets = project_root / "data" / "assets"
-    reports = project_root / "output" / "pdf"
+    media_bundle = build_runtime_media_bundle(project_root)
     if not processed_current.exists():
         raise DriveSyncError(f"Processed data not found: {processed_current}")
 
@@ -303,10 +354,7 @@ def publish_project_snapshot(
     for local_root, remote_parent, prefix, allowed_paths in (
         (processed_current, ensure_path(service, current_id, ["tables"]), "tables", None),
         (external, ensure_path(service, current_id, ["besoccer"]), "besoccer", {"player_profiles_validated.parquet", "teams.parquet"}),
-        (assets / "first_division_2026_2027" / "clubs", ensure_path(service, settings.root_folder_id, ["03_Assets", "clubs"]), "assets/clubs", None),
-        (assets / "first_division_2026_2027" / "players", ensure_path(service, settings.root_folder_id, ["03_Assets", "players"]), "assets/players", None),
-        (assets / "brand", ensure_path(service, settings.root_folder_id, ["03_Assets", "brand"]), "assets/brand", {"al_wasl.png"}),
-        (reports, ensure_path(service, settings.root_folder_id, ["04_Reports", "category reports"]), "reports/category", {"uae_first_division_category_board_report_en.pdf"}),
+        (media_bundle.parent, current_id, "runtime", {media_bundle.name}),
     ):
         if not local_root.exists():
             continue
@@ -360,25 +408,15 @@ def sync_runtime_snapshot(project_root: Path, settings: DriveSettings) -> dict[s
         "besoccer", remote_hashes, local_hashes,
     )
 
-    assets_root = find_path(service, settings.root_folder_id, ["03_Assets"])
-    if not assets_root:
-        raise DriveSyncError("The Drive assets folder does not exist.")
-    for remote_name, local_name in (("clubs", "clubs"), ("players", "players"), ("brand", "brand")):
-        source = find_child(service, assets_root, remote_name, FOLDER_MIME_TYPE)
-        if source:
-            target = (
-                data_root / "assets" / "first_division_2026_2027" / local_name
-                if local_name != "brand"
-                else data_root / "assets" / "brand"
-            )
-            downloaded += download_tree(
-                service, source["id"], target, f"assets/{local_name}", remote_hashes, local_hashes
-            )
-    reports_root = find_path(service, settings.root_folder_id, ["04_Reports", "category reports"])
-    if reports_root:
-        downloaded += download_tree(
-            service, reports_root, project_root / "output" / "pdf", "reports/category", remote_hashes, local_hashes
-        )
+    media_bundle = find_child(service, current_id, "uae_first_division_runtime_media.zip")
+    media_key = "runtime/uae_first_division_runtime_media.zip"
+    local_bundle = project_root / "tmp" / "uae_first_division_runtime_media.zip"
+    if not media_bundle:
+        raise DriveSyncError("Drive runtime media bundle is missing.")
+    if remote_hashes.get(media_key) != local_hashes.get(media_key) or not local_bundle.exists():
+        download_file(service, media_bundle["id"], local_bundle)
+        extract_runtime_media_bundle(local_bundle, project_root)
+        downloaded += 1
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"downloaded": downloaded, "published_at": manifest.get("published_at")}

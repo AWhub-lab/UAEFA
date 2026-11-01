@@ -204,7 +204,11 @@ def asset_path(relative_path: object) -> Path | None:
     if relative_path is None or pd.isna(relative_path):
         return None
     path = PROJECT_ROOT / str(relative_path)
-    return path if path.exists() else None
+    if path.exists():
+        return path
+    # Deployment downloads compact JPEG portraits; source PNGs stay local.
+    jpeg_path = path.with_suffix(".jpg") if path.suffix.lower() == ".png" else path
+    return jpeg_path if jpeg_path.exists() else None
 
 
 def to_number(series: pd.Series) -> pd.Series:
