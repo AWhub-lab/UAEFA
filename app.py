@@ -68,6 +68,7 @@ def require_app_access() -> bool:
     password = configured_app_password()
     if not password or st.session_state.get("app_access_granted", False):
         return True
+    brand_logo = brand_uri("al_wasl.png")
 
     st.markdown(
         """
@@ -75,14 +76,17 @@ def require_app_access() -> bool:
         .access-shell{max-width:540px;margin:11vh auto 0;padding:2.6rem 2.35rem;
           border:1px solid #e1d4a6;border-radius:24px;background:linear-gradient(145deg,#fffdf7,#f7f3e8);
           box-shadow:0 20px 54px rgba(88,62,6,.13);text-align:center}
+        .access-brand{display:block;width:92px;height:92px;object-fit:contain;margin:-.25rem auto 1rem;
+          filter:drop-shadow(0 10px 16px rgba(78,57,8,.22))}
         .access-kicker{margin:0 0 .65rem;color:#ae7800;font-size:.72rem;font-weight:800;
           letter-spacing:.2em;text-transform:uppercase}.access-title{margin:0;color:#111315;
           font-family:'Barlow Condensed',sans-serif;font-size:2.35rem;font-weight:800;text-transform:uppercase}
         .access-copy{margin:.6rem auto 0;max-width:380px;color:#62666b;font-size:.9rem;line-height:1.55}
         </style>
-        <div class='access-shell'><p class='access-kicker'>Al Wasl Football Intelligence</p>
+        <div class='access-shell'><img class='access-brand' src='__BRAND_LOGO__' alt='Al Wasl'>
+        <p class='access-kicker'>Al Wasl Football Intelligence</p>
         <h1 class='access-title'>Private access</h1><p class='access-copy'>Enter the access password to open the UAE First Division hub.</p></div>
-        """,
+        """.replace("__BRAND_LOGO__", brand_logo),
         unsafe_allow_html=True,
     )
     with st.form("app_access_form"):
