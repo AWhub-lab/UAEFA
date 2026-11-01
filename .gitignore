@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+/client_secret_*.json
+/uae-first-division-*.json
+/.drive_oauth_token.json
 .streamlit/secrets.toml
 
 # Downloaded source data, generated assets and private local exports

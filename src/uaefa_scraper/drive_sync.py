@@ -30,6 +30,18 @@ class DriveSettings:
     service_account_json: str
 
 
+def build_drive_service(credentials):
+    """Create a Drive client with bounded HTTP calls for unattended syncs."""
+    try:
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        from googleapiclient.discovery import build
+    except ImportError as exc:  # pragma: no cover - dependency configuration failure
+        raise DriveSyncError("Google Drive dependencies are not installed.") from exc
+    http = AuthorizedHttp(credentials, http=httplib2.Http(timeout=60))
+    return build("drive", "v3", http=http, cache_discovery=False)
+
+
 def settings_from_mapping(mapping: dict[str, Any] | None = None) -> DriveSettings | None:
     """Resolve settings from a mapping first, then environment variables."""
     mapping = mapping or {}
@@ -46,7 +58,6 @@ def service_from_settings(settings: DriveSettings):
     """Build an authenticated Drive client only when a sync is requested."""
     try:
         from google.oauth2 import service_account
-        from googleapiclient.discovery import build
     except ImportError as exc:  # pragma: no cover - deployment configuration failure
         raise DriveSyncError("Google Drive dependencies are not installed.") from exc
     try:
@@ -54,7 +65,46 @@ def service_from_settings(settings: DriveSettings):
         credentials = service_account.Credentials.from_service_account_info(info, scopes=[DRIVE_SCOPE])
     except (TypeError, ValueError) as exc:
         raise DriveSyncError("The Google service-account secret is not valid JSON.") from exc
-    return build("drive", "v3", credentials=credentials, cache_discovery=False)
+    return build_drive_service(credentials)
+
+
+def publisher_service_from_oauth(project_root: Path):
+    """Authorize the local publisher with the owner's Drive account.
+
+    Service accounts can read the shared project folder in production but do not
+    have personal Drive storage quota. Publishing therefore uses a local OAuth
+    client and stores its renewable token outside Git.
+    """
+    configured_path = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET_PATH", "").strip()
+    client_path = project_root / configured_path if configured_path else None
+    if not client_path or not client_path.exists():
+        candidates = sorted(project_root.glob("client_secret_*.json"))
+        client_path = candidates[0] if len(candidates) == 1 else None
+    if not client_path or not client_path.exists():
+        raise DriveSyncError("OAuth client JSON not found. Download a Desktop OAuth credential first.")
+
+    token_path = project_root / ".drive_oauth_token.json"
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+    except ImportError as exc:  # pragma: no cover - local environment failure
+        raise DriveSyncError("Google OAuth publishing dependencies are not installed.") from exc
+
+    credentials = None
+    if token_path.exists():
+        try:
+            credentials = Credentials.from_authorized_user_file(str(token_path), [DRIVE_SCOPE])
+        except (OSError, ValueError):
+            token_path.unlink(missing_ok=True)
+    if credentials and credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+    if not credentials or not credentials.valid:
+        flow = InstalledAppFlow.from_client_secrets_file(str(client_path), [DRIVE_SCOPE])
+        credentials = flow.run_local_server(port=0)
+    token_path.write_text(credentials.to_json(), encoding="utf-8")
+    token_path.chmod(0o600)
+    return build_drive_service(credentials)
 
 
 def sha256_file(path: Path) -> str:
@@ -127,13 +177,15 @@ def upload_file(service, parent_id: str, source: Path, name: str | None = None) 
 
     name = name or source.name
     existing = find_child(service, parent_id, name)
-    media = MediaFileUpload(str(source), resumable=True)
+    # Individual tables and visual assets are compact. A direct upload avoids
+    # resumable sessions lingering indefinitely on an interrupted connection.
+    media = MediaFileUpload(str(source), resumable=False)
     if existing:
-        updated = service.files().update(fileId=existing["id"], media_body=media, fields="id").execute()
+        updated = service.files().update(fileId=existing["id"], media_body=media, fields="id").execute(num_retries=3)
         return updated["id"]
     created = service.files().create(
         body={"name": name, "parents": [parent_id]}, media_body=media, fields="id"
-    ).execute()
+    ).execute(num_retries=3)
     return created["id"]
 
 
@@ -141,12 +193,12 @@ def upload_bytes(service, parent_id: str, name: str, payload: bytes) -> str:
     from googleapiclient.http import MediaIoBaseUpload
 
     existing = find_child(service, parent_id, name)
-    media = MediaIoBaseUpload(io.BytesIO(payload), mimetype="application/json", resumable=True)
+    media = MediaIoBaseUpload(io.BytesIO(payload), mimetype="application/json", resumable=False)
     if existing:
-        return service.files().update(fileId=existing["id"], media_body=media, fields="id").execute()["id"]
+        return service.files().update(fileId=existing["id"], media_body=media, fields="id").execute(num_retries=3)["id"]
     return service.files().create(
         body={"name": name, "parents": [parent_id]}, media_body=media, fields="id"
-    ).execute()["id"]
+    ).execute(num_retries=3)["id"]
 
 
 def download_file(service, file_id: str, destination: Path) -> None:
@@ -176,12 +228,19 @@ def publish_tree(
     remote_root_id: str,
     remote_prefix: str,
     previous_hashes: dict[str, str],
+    allowed_paths: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """Upload changed files from a local tree and return manifest records."""
+    """Upload changed runtime files from a local tree and return manifest records."""
     records: list[dict[str, Any]] = []
     uploaded = 0
     skipped = 0
-    for source in sorted(path for path in local_root.rglob("*") if path.is_file()):
+    sources = sorted(
+        path for path in local_root.rglob("*")
+        if path.is_file() and (
+            allowed_paths is None or path.relative_to(local_root).as_posix() in allowed_paths
+        )
+    )
+    for index, source in enumerate(sources, start=1):
         relative = source.relative_to(local_root)
         key = f"{remote_prefix}/{relative.as_posix()}"
         digest = sha256_file(source)
@@ -192,6 +251,8 @@ def publish_tree(
         folder_id = ensure_path(service, remote_root_id, list(relative.parts[:-1]))
         upload_file(service, folder_id, source)
         uploaded += 1
+        if index == 1 or index % 25 == 0 or index == len(sources):
+            print(f"Drive publish · {remote_prefix}: {index}/{len(sources)} files", flush=True)
     return records, uploaded, skipped
 
 
@@ -220,13 +281,16 @@ def download_tree(
     return downloaded
 
 
-def publish_project_snapshot(project_root: Path, settings: DriveSettings, include_raw: bool = True) -> dict[str, Any]:
-    """Publish local data incrementally to the agreed Drive folder structure."""
-    service = service_from_settings(settings)
+def publish_project_snapshot(
+    project_root: Path,
+    settings: DriveSettings,
+    service=None,
+) -> dict[str, Any]:
+    """Publish only the files required by the deployed application."""
+    service = service or service_from_settings(settings)
     processed_current = project_root / "data" / "processed" / "first_division_2026_2027" / "current"
     external = project_root / "data" / "external" / "besoccer" / "first_division_2026_2027"
     assets = project_root / "data" / "assets"
-    raw = project_root / "data" / "raw" / "first_division_2026_2027"
     reports = project_root / "output" / "pdf"
     if not processed_current.exists():
         raise DriveSyncError(f"Processed data not found: {processed_current}")
@@ -236,24 +300,19 @@ def publish_project_snapshot(project_root: Path, settings: DriveSettings, includ
     previous_hashes = {entry["path"]: entry["sha256"] for entry in previous.get("files", [])}
     files: list[dict[str, Any]] = []
     uploaded = skipped = 0
-    for local_root, remote_parent, prefix in (
-        (processed_current, ensure_path(service, current_id, ["tables"]), "tables"),
-        (external, ensure_path(service, current_id, ["besoccer"]), "besoccer"),
-        (assets / "first_division_2026_2027" / "clubs", ensure_path(service, settings.root_folder_id, ["03_Assets", "clubs"]), "assets/clubs"),
-        (assets / "first_division_2026_2027" / "players", ensure_path(service, settings.root_folder_id, ["03_Assets", "players"]), "assets/players"),
-        (assets / "brand", ensure_path(service, settings.root_folder_id, ["03_Assets", "brand"]), "assets/brand"),
-        (reports, ensure_path(service, settings.root_folder_id, ["04_Reports", "category reports"]), "reports/category"),
+    for local_root, remote_parent, prefix, allowed_paths in (
+        (processed_current, ensure_path(service, current_id, ["tables"]), "tables", None),
+        (external, ensure_path(service, current_id, ["besoccer"]), "besoccer", {"player_profiles_validated.parquet", "teams.parquet"}),
+        (assets / "first_division_2026_2027" / "clubs", ensure_path(service, settings.root_folder_id, ["03_Assets", "clubs"]), "assets/clubs", None),
+        (assets / "first_division_2026_2027" / "players", ensure_path(service, settings.root_folder_id, ["03_Assets", "players"]), "assets/players", None),
+        (assets / "brand", ensure_path(service, settings.root_folder_id, ["03_Assets", "brand"]), "assets/brand", {"al_wasl.png"}),
+        (reports, ensure_path(service, settings.root_folder_id, ["04_Reports", "category reports"]), "reports/category", {"uae_first_division_category_board_report_en.pdf"}),
     ):
         if not local_root.exists():
             continue
-        records, added, unchanged = publish_tree(service, local_root, remote_parent, prefix, previous_hashes)
-        files.extend(records)
-        uploaded += added
-        skipped += unchanged
-
-    if include_raw and raw.exists():
-        raw_id = ensure_path(service, settings.root_folder_id, ["01_Raw data", "API JSON snapshots", "2026_2027"])
-        records, added, unchanged = publish_tree(service, raw, raw_id, "raw", previous_hashes)
+        records, added, unchanged = publish_tree(
+            service, local_root, remote_parent, prefix, previous_hashes, allowed_paths
+        )
         files.extend(records)
         uploaded += added
         skipped += unchanged
