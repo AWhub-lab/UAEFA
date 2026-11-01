@@ -224,6 +224,11 @@ def normalise_report(
         club_id = team_ids[side]
         for squad_role, block in (("starter", team.get("active", {})), ("substitute", team.get("substitute", {}))):
             for player in as_list(block.get("player")):
+                # Some lower-division reports include empty list placeholders or
+                # substitution metadata in the player collection. They are not
+                # player records and must not become appearances.
+                if not isinstance(player, dict) or not isinstance(player.get("attributes"), dict):
+                    continue
                 player_attrs = player.get("attributes", {})
                 player_id = str(player_attrs.get("player_id", ""))
                 if not player_id:
@@ -262,6 +267,8 @@ def normalise_report(
                 )
 
         for official in as_list(team.get("official")):
+            if not isinstance(official, dict):
+                continue
             tables["staff"].append(
                 {
                     "match_id": match_id,
@@ -276,6 +283,8 @@ def normalise_report(
             )
 
     for event_order, event in enumerate(highlights.get("match_highlights2", {}).get("event", []), start=1):
+        if not isinstance(event, dict):
+            continue
         side = event.get("club_dir")
         tables["events"].append(
             {
