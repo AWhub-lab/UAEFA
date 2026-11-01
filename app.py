@@ -96,6 +96,12 @@ TRANSLATIONS = {
     "Buscar jugador": "Search player", "Nombre o apellidos": "First name or surname", "Rango de edad": "Age range",
     "Rango de año de nacimiento": "Birth-year range", "Filtros vinculados": "Linked filters",
     "El último filtro ajustado define la selección exacta; el otro se actualiza automáticamente.": "The last filter adjusted defines the exact selection; the other updates automatically.",
+    "Perfil deportivo": "Player profile", "Edad y disponibilidad": "Age and availability",
+    "Datos personales y contexto de registro": "Personal details and registration context",
+    "Acota la cohorte por fecha de nacimiento, participación y estatus": "Narrow the cohort by date of birth, participation and status",
+    "La edad se calcula en la fecha de corte de la jornada visible. Al modificarla se ajusta automáticamente el rango de año de nacimiento.": "Age is calculated at the visible matchday cut-off date. Changing it automatically updates the birth-year range.",
+    "Filtra por el año oficial de nacimiento. Al modificarlo se ajusta automáticamente el rango de edad.": "Filter by the official year of birth. Changing it automatically updates the age range.",
+    "Disponibilidad": "Availability",
     "Minutos mínimos": "Minimum minutes", "Selecciona un jugador...": "Select a player...",
     "Todas": "All", "Todos": "All", "Sin dato": "No data", "Sin eventos registrados.": "No events recorded.",
     "Sin participaciones registradas.": "No appearances recorded.", "No hay registros suficientes para este ranking en el periodo seleccionado.": "There are not enough records for this ranking in the selected period.",
@@ -790,6 +796,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.scatter-shell){margin-top:.
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell){margin-top:.15rem;border-color:#dedfd8!important;border-radius:20px!important;background:linear-gradient(145deg,#ffffff,#fbfbf7)!important;box-shadow:0 10px 30px rgba(28,35,22,.05)}
 .filter-shell{display:flex;align-items:baseline;gap:.75rem;margin:.05rem 0 .55rem;padding-bottom:.65rem;border-bottom:1px solid var(--line)}
 .filter-shell span{font-size:.66rem;font-weight:800;letter-spacing:.16em;color:#8b6200}.filter-shell b{font-size:.8rem;font-weight:600;color:var(--muted)}
+.filter-band{display:flex;align-items:center;gap:.7rem;margin:1rem 0 .55rem;padding:.55rem .7rem;border-radius:10px;background:linear-gradient(90deg,rgba(191,135,0,.11),rgba(191,135,0,.025));border-left:3px solid #bb8200}.filter-band strong{font-size:.66rem;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#805900}.filter-band span{font-size:.7rem;color:var(--muted);font-weight:600}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) div[data-testid="stWidgetLabel"]{margin-bottom:.35rem!important}div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) div[data-testid="stWidgetLabel"] p{font-size:.65rem!important;font-weight:800!important;letter-spacing:.13em!important;text-transform:uppercase!important;color:#6d6f70!important}div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) [data-baseweb="input"],div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) [data-baseweb="select"]>div{border-radius:13px!important;border-color:#d9d8d1!important;background:#fff!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 3px 10px rgba(21,27,22,.035)}div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) [data-testid="stSlider"]{padding:.1rem .25rem .2rem;border-radius:12px;background:linear-gradient(180deg,#fff,#fcfbf7)}
 .filter-legend{display:flex;gap:.55rem;flex-wrap:wrap;justify-content:flex-start;margin-top:.25rem;padding-top:.65rem;border-top:1px dashed var(--line)}
 /* ---------- kpis */
 .kpis{display:grid;grid-template-columns:repeat(var(--n,4),1fr);gap:.8rem;margin-top:.9rem}
@@ -2083,7 +2091,8 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
         if st.session_state.get(state_key) == old_value:
             st.session_state[state_key] = new_value
     with st.container(border=True):
-        html("<div class='filter-shell'><span>EXPLORADOR DE PLANTILLAS</span><b>Filtra y combina criterios sin perder contexto</b></div>")
+        html(f"<div class='filter-shell'><span>{t('EXPLORADOR DE PLANTILLAS')}</span><b>{t('Filtra y combina criterios sin perder contexto')}</b></div>")
+        html(f"<div class='filter-band'><strong>01 · {t('Perfil deportivo')}</strong><span>{t('Datos personales y contexto de registro')}</span></div>")
         primary_filters = st.columns(4, gap="small", vertical_alignment="bottom")
         query = primary_filters[0].text_input(t("Buscar jugador"), placeholder=t("Nombre o apellidos"), key="q")
         position = primary_filters[1].selectbox(
@@ -2095,12 +2104,13 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
         )
         club_filter = primary_filters[3].selectbox(t("Club"), ["Todos"] + sorted(explorer["club_name"].unique().tolist()), key="clubf")
 
-        detail_filters = st.columns(5, gap="small", vertical_alignment="bottom")
+        html(f"<div class='filter-band'><strong>02 · {t('Edad y disponibilidad')}</strong><span>{t('Acota la cohorte por fecha de nacimiento, participación y estatus')}</span></div>")
+        demographics, participation, availability = st.columns([2.2, 1.9, 1.1], gap="medium", vertical_alignment="bottom")
         age_values = explorer["Edad"].dropna()
         birth_year_values = explorer["Año de nacimiento"].dropna()
         if age_values.empty or birth_year_values.empty:
             age_range = None
-            detail_filters[0].caption(t("Edad: no publicada todavía"))
+            demographics.caption(t("Edad: no publicada todavía"))
         else:
             age_min, age_max = int(age_values.min()), int(age_values.max())
             year_min, year_max = int(birth_year_values.min()), int(birth_year_values.max())
@@ -2138,19 +2148,23 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
             if current_years[0] < year_min or current_years[1] > year_max:
                 st.session_state["birth_year_range"] = (year_min, year_max)
 
-            age_range = detail_filters[0].slider(
-                t("Rango de edad"), age_min, age_max, key="age_range", on_change=sync_birth_year_from_age
+            age_column, birth_year_column = demographics.columns(2, gap="small")
+            age_range = age_column.slider(
+                t("Rango de edad"), age_min, age_max, key="age_range", on_change=sync_birth_year_from_age,
+                help=t("La edad se calcula en la fecha de corte de la jornada visible. Al modificarla se ajusta automáticamente el rango de año de nacimiento."),
             )
-            birth_year_range = detail_filters[1].slider(
+            birth_year_range = birth_year_column.slider(
                 t("Rango de año de nacimiento"), year_min, year_max,
-                key="birth_year_range", on_change=sync_age_from_birth_year
+                key="birth_year_range", on_change=sync_age_from_birth_year,
+                help=t("Filtra por el año oficial de nacimiento. Al modificarlo se ajusta automáticamente el rango de edad."),
             )
-            detail_filters[1].caption(f"{t('Filtros vinculados')} · {t('El último filtro ajustado define la selección exacta; el otro se actualiza automáticamente.')}")
-        min_minutes = int(detail_filters[2].number_input(t("Minutos mínimos"), min_value=0, value=0, step=30, key="min_minutes"))
+            demographics.caption(f"{t('Filtros vinculados')} · {t('El último filtro ajustado define la selección exacta; el otro se actualiza automáticamente.')}")
+        participation_minutes, participation_status = participation.columns(2, gap="small")
+        min_minutes = int(participation_minutes.number_input(t("Minutos mínimos"), min_value=0, value=0, step=30, key="min_minutes"))
         status_options = ["Todos"] + sorted(explorer["player_status"].dropna().unique().tolist())
-        player_status = detail_filters[3].selectbox(t("Estatus"), status_options, key="player_status")
-        with detail_filters[4]:
-            st.caption(t("DISPONIBILIDAD"))
+        player_status = participation_status.selectbox(t("Estatus"), status_options, key="player_status")
+        with availability:
+            st.caption(t("Disponibilidad"))
             played_only = st.checkbox(t("Solo jugadores con minutos"), value=False, key="played_only")
 
         legend = "".join(pos_badge(code, full=True) for code in ("GK", "D", "M", "A"))
