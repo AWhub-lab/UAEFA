@@ -1009,6 +1009,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) div[data-test
 .pl .av{position:relative;width:62px;margin:0 auto}
 .pl .num{position:absolute;right:-8px;bottom:-4px;min-width:24px;height:24px;display:grid;place-items:center;padding:0 .25rem;border-radius:8px;background:#ffd21f;border:1px solid #ffffff;color:#111827;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:.95rem;box-shadow:0 2px 6px rgba(0,0,0,.22)}
 .pl .cap{position:absolute;left:-6px;top:-4px;width:20px;height:20px;border-radius:50%;background:var(--yellow);color:#0a0c0f;font-size:.68rem;font-weight:800;display:grid;place-items:center}
+.goalmark{position:absolute;right:-8px;top:-6px;display:flex;align-items:center;gap:.08rem;min-height:20px;padding:.08rem .22rem;border:1px solid #fff;border-radius:999px;background:#152418;color:#fff;font-size:.66rem;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.32);z-index:2}.goalmark b{color:#ffd21f;font-family:'Barlow Condensed',sans-serif;font-size:.75rem;line-height:1}
 .pl .out{position:absolute;left:-8px;bottom:-4px;font-size:.62rem;font-weight:700;padding:.05rem .3rem;border-radius:6px;background:#3a1016;color:var(--red);border:1px solid #6b1c27}
 .pl .pn{margin-top:.4rem;font-size:.72rem;font-weight:600;line-height:1.15;color:#fff;text-shadow:0 1px 3px #000;overflow:visible}
 .pl .player-name{display:-webkit-box;overflow:hidden;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:1.15em}
@@ -1420,7 +1421,15 @@ def formation_key(value: object) -> int:
     return int(digits[0]) if digits else 0
 
 
-def pitch_html(roster: pd.DataFrame, minutes_out: dict[str, str]) -> str:
+def goal_marker(goals: int) -> str:
+    """Keep the scorer indicator compact when a player scores multiple times."""
+    if goals <= 0:
+        return ""
+    multiplier = f"<b>×{goals}</b>" if goals > 1 else ""
+    return f"<span class='goalmark' title='{goals} goal{'s' if goals > 1 else ''}'>⚽{multiplier}</span>"
+
+
+def pitch_html(roster: pd.DataFrame, minutes_out: dict[str, str], goals_by_player: dict[str, int]) -> str:
     lines = []
     starters = roster[roster["started"]].copy()
     starters["fkey"] = starters["formation_position"].map(formation_key)
@@ -1432,25 +1441,27 @@ def pitch_html(roster: pd.DataFrame, minutes_out: dict[str, str]) -> str:
         for _, p in group.iterrows():
             captain = "<span class='cap'>C</span>" if p["captain"] else ""
             out = f"<span class='out'>↓{minutes_out[p.player_id]}'</span>" if p.player_id in minutes_out else ""
+            goals = goal_marker(goals_by_player.get(str(p.player_id), 0))
             birth_text = birth_label(p.get("Nacimiento"))
             birth_markup = f"<small>{escape(str(birth_text))}</small>" if birth_text else ""
             players.append(
-                f"<div class='pl'><div class='av'>{portrait(p, 'round')}<span class='num'>{escape(str(p['dorsal']))}</span>{captain}{out}</div>"
+                f"<div class='pl'><div class='av'>{portrait(p, 'round')}<span class='num'>{escape(str(p['dorsal']))}</span>{captain}{goals}{out}</div>"
                 f"<div class='pn'><span class='player-name'>{escape(str(p['shortname_en']))}</span>{birth_markup}</div></div>"
             )
         lines.append(f"<div class='line'>{''.join(players)}</div>")
     return f"<div class='pitch'>{''.join(lines)}</div>"
 
 
-def bench_html(roster: pd.DataFrame) -> str:
+def bench_html(roster: pd.DataFrame, goals_by_player: dict[str, int]) -> str:
     subs = roster[~roster["started"]].sort_values("dorsal", key=lambda s: pd.to_numeric(s, errors="coerce"))
     cells = []
     for _, p in subs.iterrows():
         entered = f"<span class='dn'>↑{escape(str(p['minute_in']))}'</span>" if p["has_played"] and not pd.isna(p["minute_in"]) else ""
+        goals = goal_marker(goals_by_player.get(str(p.player_id), 0))
         birth_text = birth_label(p.get("Nacimiento"))
         birth_markup = f" · {escape(str(birth_text))}" if birth_text else ""
         cells.append(
-            f"<div class='bn{' played' if p['has_played'] else ''}'><div class='av'>{portrait(p, 'round')}</div>"
+            f"<div class='bn{' played' if p['has_played'] else ''}'><div class='av'>{portrait(p, 'round')}{goals}</div>"
             f"<div class='t'><b>{escape(str(p['shortname_en']))}</b><small>#{escape(str(p['dorsal']))} · {pos_badge(p['position'])}{birth_markup}</small></div>{entered}</div>"
         )
     return f"<div class='bench'>{''.join(cells)}</div>"
@@ -1527,13 +1538,14 @@ def render_matches(data: dict[str, pd.DataFrame], club_map: dict[str, pd.Series]
     appearances["Edad"] = appearances["birth_date_official"].map(lambda value: age_at_date(value, match.match_date))
     appearances["Nacimiento"] = appearances["birth_date_official"].map(lambda value: birth_year_age_label(value, match.match_date))
     subs_out = events[events["event_type"].eq("subs")].set_index("player_id")["minute"].astype(str).to_dict()
+    goals_by_player = events.loc[events["event_type"].eq("goal")].groupby("player_id").size().astype(int).to_dict()
     left, right = st.columns(2, gap="large")
     for column, club_id, club in ((left, str(match.home_club_id), home), (right, str(match.away_club_id), away)):
         roster = appearances[appearances["club_id"].eq(club_id)]
         with column:
             html(f"<div class='teamhead'>{crest(club, 44)}<h3>{escape(str(club['club_name']))}</h3></div>")
-            html(pitch_html(roster, subs_out))
-            html(bench_html(roster))
+            html(pitch_html(roster, subs_out, goals_by_player))
+            html(bench_html(roster, goals_by_player))
 
     section("Cuerpo técnico", "Staff registrado en el acta")
     left, right = st.columns(2, gap="large")
