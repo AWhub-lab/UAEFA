@@ -227,6 +227,7 @@ def publish_project_snapshot(project_root: Path, settings: DriveSettings, includ
     external = project_root / "data" / "external" / "besoccer" / "first_division_2026_2027"
     assets = project_root / "data" / "assets"
     raw = project_root / "data" / "raw" / "first_division_2026_2027"
+    reports = project_root / "output" / "pdf"
     if not processed_current.exists():
         raise DriveSyncError(f"Processed data not found: {processed_current}")
 
@@ -241,6 +242,7 @@ def publish_project_snapshot(project_root: Path, settings: DriveSettings, includ
         (assets / "first_division_2026_2027" / "clubs", ensure_path(service, settings.root_folder_id, ["03_Assets", "clubs"]), "assets/clubs"),
         (assets / "first_division_2026_2027" / "players", ensure_path(service, settings.root_folder_id, ["03_Assets", "players"]), "assets/players"),
         (assets / "brand", ensure_path(service, settings.root_folder_id, ["03_Assets", "brand"]), "assets/brand"),
+        (reports, ensure_path(service, settings.root_folder_id, ["04_Reports", "category reports"]), "reports/category"),
     ):
         if not local_root.exists():
             continue
@@ -313,6 +315,11 @@ def sync_runtime_snapshot(project_root: Path, settings: DriveSettings) -> dict[s
             downloaded += download_tree(
                 service, source["id"], target, f"assets/{local_name}", remote_hashes, local_hashes
             )
+    reports_root = find_path(service, settings.root_folder_id, ["04_Reports", "category reports"])
+    if reports_root:
+        downloaded += download_tree(
+            service, reports_root, project_root / "output" / "pdf", "reports/category", remote_hashes, local_hashes
+        )
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"downloaded": downloaded, "published_at": manifest.get("published_at")}

@@ -63,6 +63,7 @@ except DriveSyncError:
 DATA_ROOT = SEASON_DATA_ROOT / "current" if (SEASON_DATA_ROOT / "current").exists() else SEASON_DATA_ROOT / "week_01"
 EXTERNAL_ROOT = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
 BRAND_ROOT = PROJECT_ROOT / "data" / "assets" / "brand"
+COMPETITION_REPORT_PATH = PROJECT_ROOT / "output" / "pdf" / "uae_first_division_category_board_report_en.pdf"
 
 SEASON = "2026/27"
 PAGES = {
@@ -150,6 +151,8 @@ TRANSLATIONS = {
     "Euros": "Euros", "Valor": "Value", "Idioma": "Language", "Navegación": "Navigation",
     "Sección": "Section", "años": "years", "Media por partido": "Average per match",
     "Puntos": "Points", "Goles a favor / en contra": "Goals for / against",
+    "Descargar informe de la competición": "Download competition report",
+    "Informe PDF actualizado de la categoría": "Updated competition PDF report",
     "Rendimiento individual · foto, club, posición, nacimiento y métrica oficial UAEFA": "Individual performance · photo, club, position, birth year and official UAEFA metric",
     "Top 5 de la jornada por defecto · compara hasta cinco equipos": "Current matchday top 5 by default · compare up to five teams",
     "Evolución de posiciones": "Position progression", "Elige un club para abrir su ficha": "Choose a club to open its profile",
@@ -1286,6 +1289,19 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
         ("Media por partido", f"{goals / max(len(data['matches']), 1):.2f}", "#2fd27a"),
         ("Jugadores", len(data["players"]), "#4c9aff"),
     ])
+    if COMPETITION_REPORT_PATH.exists():
+        download_column, _ = st.columns([1.7, 3.3])
+        with download_column:
+            st.download_button(
+                t("Descargar informe de la competición"),
+                data=COMPETITION_REPORT_PATH.read_bytes(),
+                file_name="uae_first_division_competition_report_en.pdf",
+                mime="application/pdf",
+                help=t("Informe PDF actualizado de la categoría"),
+                icon=":material/download:",
+                type="primary",
+                use_container_width=True,
+            )
     section("Clasificación provisional", f"Acumulada hasta {scope_label()}")
     standings_table(standings, club_map)
     section("Evolución de posiciones", "Top 5 de la jornada por defecto · compara hasta cinco equipos")
