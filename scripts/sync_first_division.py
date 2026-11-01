@@ -41,17 +41,46 @@ def read_existing_or_fetch(client: Any, url: str, candidates: list[Path]) -> tup
     return client.get_json(url, target), True
 
 
-def completed_first_division_matches(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def first_division_calendar_matches(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return every official fixture, including those without a match report yet."""
     matches: list[dict[str, Any]] = []
     for group in payload.get("matches", []):
         if str(group.get("attributes", {}).get("competition_id")) != COMPETITION_ID:
             continue
-        matches.extend(
-            item
-            for item in group.get("items", [])
-            if str(item.get("status_id")) == "6"
-        )
+        matches.extend(group.get("items", []))
     return sorted(matches, key=lambda item: (int(item.get("week_no", 0)), int(item["match_id"])))
+
+
+def normalise_scheduled_match(match: dict[str, Any], tables: dict[str, list[dict[str, Any]],], clubs: dict[str, dict[str, Any]], pilot: Any) -> None:
+    """Add a calendar fixture without requesting an unavailable report or lineup."""
+    raw_time = str(match.get("time") or "")
+    try:
+        kickoff = datetime.strptime(raw_time, "%Y-%m-%d %I:%M %p")
+        match_date, match_time = kickoff.date().isoformat(), kickoff.strftime("%H:%M")
+    except ValueError:
+        match_date, match_time = raw_time[:10], raw_time[11:]
+    home_id = str(match.get("club1_id") or "")
+    # UAEFA's calendar currently exposes this field with a historical typo.
+    away_id = str(match.get("club2_id") or match.get("club2_ld") or "")
+    for club_id, name in ((home_id, match.get("club1")), (away_id, match.get("club2"))):
+        if club_id:
+            clubs.setdefault(
+                club_id,
+                {"club_id": club_id, "club_name": name, "crest_url": pilot.image_url("club", club_id), "crest_file": None},
+            )
+    tables["matches"].append(
+        {
+            "match_id": str(match["match_id"]), "competition_id": match.get("competition_id"),
+            "competition": match.get("competition"), "season": "2026/2027", "week_no": match.get("week_no"),
+            "match_no": match.get("match_no"), "match_date": match_date, "match_time": match_time,
+            "status_id": match.get("status_id"), "home_club_id": home_id, "home_club_name": match.get("club1"),
+            "away_club_id": away_id, "away_club_name": match.get("club2"), "home_score": None,
+            "away_score": None, "home_score_h1": None, "away_score_h1": None,
+            "playground": match.get("playground"), "playground_id": match.get("playground_id"),
+            "attendance": None, "round": match.get("round"), "group": match.get("group"),
+            "stage": match.get("stage"), "source_url": f"https://www.uaefa.ae/en/match/{match['match_id']}",
+        }
+    )
 
 
 def hydrate_cached_media(clubs: dict[str, dict[str, Any]], players: dict[str, dict[str, Any]]) -> None:
@@ -94,8 +123,10 @@ def main() -> int:
     else:
         # The calendar is deliberately refreshed once per run so new rounds are discovered.
         calendar = client.get_json(calendar_url, calendar_path, force=True)
-    matches = completed_first_division_matches(calendar)
-    if not matches:
+    calendar_matches = first_division_calendar_matches(calendar)
+    completed_matches = [item for item in calendar_matches if str(item.get("status_id")) == "6"]
+    scheduled_matches = [item for item in calendar_matches if str(item.get("status_id")) != "6"]
+    if not completed_matches:
         raise RuntimeError("No completed First Division matches were found. Stopping without changes.")
 
     tables = {name: [] for name in pilot.TABLE_COLUMNS}
@@ -104,9 +135,9 @@ def main() -> int:
     new_reports = 0
     reused_reports = 0
 
-    for index, match in enumerate(matches, start=1):
+    for index, match in enumerate(completed_matches, start=1):
         match_id = str(match["match_id"])
-        print(f"[{index}/{len(matches)}] {match_id}: {match['club1']} vs {match['club2']}", flush=True)
+        print(f"[{index}/{len(completed_matches)}] {match_id}: {match['club1']} vs {match['club2']}", flush=True)
         legacy = pilot.RAW_ROOT / "matches" / match_id
         current = RAW_ROOT / "matches" / match_id
         report, report_is_new = read_existing_or_fetch(
@@ -122,6 +153,9 @@ def main() -> int:
         new_reports += int(report_is_new) + int(highlights_is_new)
         reused_reports += int(not report_is_new) + int(not highlights_is_new)
         pilot.normalise_report(match, report, highlights, tables, players, clubs)
+
+    for match in scheduled_matches:
+        normalise_scheduled_match(match, tables, clubs, pilot)
 
     media_summary = {"crests": 0, "portraits": 0, "missing": 0}
     if not args.skip_media:
@@ -143,8 +177,10 @@ def main() -> int:
         "season": "2026/2027",
         "calendar_date_from": SEASON_START,
         "calendar_date_to": args.date_to,
-        "completed_matches": len(tables["matches"]),
-        "weeks": sorted({int(match["week_no"]) for match in matches}),
+        "calendar_matches": len(calendar_matches),
+        "completed_matches": len(completed_matches),
+        "scheduled_matches": len(scheduled_matches),
+        "weeks": sorted({int(match["week_no"]) for match in calendar_matches}),
         "clubs": len(tables["clubs"]),
         "players": len(tables["players"]),
         "appearances": len(tables["appearances"]),

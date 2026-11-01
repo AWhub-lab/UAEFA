@@ -162,6 +162,8 @@ TRANSLATIONS = {
     "Actualizar datos": "Refresh data", "Jornada de corte": "Matchday cut-off", "Vista activa": "Active view",
     "Datos locales en Parquet · actualización incremental disponible.": "Local Parquet data · incremental update available.",
     "Fuente: UAEFA public API": "Source: UAEFA public API", "Dorsal": "Squad number",
+    "Programado": "Scheduled", "Acta no disponible todavía": "Match report not available yet",
+    "El acta oficial, las alineaciones y los eventos estarán disponibles tras el inicio del partido.": "The official match report, lineups and events will be available after kick-off.",
     "Partidos titular": "Matches started", "Partidos jugados": "Matches played", "Minutos jugados": "Minutes played",
     "Convocatorias": "Squad selections", "Titularidades": "Starts", "Tarjetas amarillas": "Yellow cards", "Tarjetas rojas": "Red cards", "Cambios": "Substitutions",
     "Año": "Year", "Club": "Club", "Acumulada": "Cumulative", "Tramo": "Interval",
@@ -367,10 +369,17 @@ def data_for_week(data: dict[str, pd.DataFrame], week: int | None) -> dict[str, 
     }
 
 
+def completed_match_mask(matches: pd.DataFrame) -> pd.Series:
+    """UAEFA status 6 is final; calendar rows must never affect sporting totals."""
+    if "status_id" not in matches:
+        return matches["home_score"].notna() & matches["away_score"].notna()
+    return matches["status_id"].astype(str).eq("6")
+
+
 def data_through_week(data: dict[str, pd.DataFrame], week: int) -> dict[str, pd.DataFrame]:
     """Return the season state accumulated through the selected matchday."""
     week_numbers = pd.to_numeric(data["matches"]["week_no"], errors="coerce")
-    matches = data["matches"][week_numbers.le(week)].copy()
+    matches = data["matches"][week_numbers.le(week) & completed_match_mask(data["matches"])].copy()
     match_ids = set(matches["match_id"])
     appearances = data["appearances"][data["appearances"]["match_id"].isin(match_ids)].copy()
     club_ids = set(matches["home_club_id"]).union(matches["away_club_id"])
@@ -963,7 +972,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.filter-shell) div[data-test
 .match-row .date{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);line-height:1.45}
 .match-row .team{display:flex;align-items:center;gap:.7rem;font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:700;text-transform:uppercase;min-width:0}
 .match-row .team.home{justify-content:flex-end;text-align:right}.match-row .team span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.match-row .result{padding:.28rem .45rem;border-radius:10px;background:#111827;border:1px solid #d5a900;color:#ffffff;font-family:'Barlow Condensed',sans-serif;font-size:1.65rem;font-weight:800;text-align:center;white-space:nowrap;box-shadow:0 3px 8px rgba(17,24,39,.16)}
+.match-row .result{padding:.28rem .45rem;border-radius:10px;background:#111827;border:1px solid #d5a900;color:#ffffff;font-family:'Barlow Condensed',sans-serif;font-size:1.65rem;font-weight:800;text-align:center;white-space:nowrap;box-shadow:0 3px 8px rgba(17,24,39,.16)}.match-row .result.pending{font-family:'Inter',sans-serif;font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:#8a6100;background:#fff8e4;border-color:#e5b53b;box-shadow:none}
 .match-row .result i{color:#ffd21f;font-style:normal;margin:0 .18rem}.match-row .meta{text-align:right;justify-content:flex-end;margin:0;font-size:.67rem;line-height:1.35}
 /* scoreboard */
 .board{position:relative;overflow:hidden;border-radius:24px;border:1px solid var(--line);padding:1.6rem 1.2rem;background:radial-gradient(600px 220px at 50% 0%,rgba(255,210,31,.12),transparent 70%),var(--s1)}
@@ -1374,6 +1383,8 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
 
 
 def match_label(match: pd.Series) -> str:
+    if str(match.get("status_id")) != "6":
+        return f"{match.home_club_name} vs {match.away_club_name}"
     return f"{match.home_club_name} {match.home_score}-{match.away_score} {match.away_club_name}"
 
 
@@ -1457,18 +1468,24 @@ def render_matches(data: dict[str, pd.DataFrame], club_map: dict[str, pd.Series]
     section(scope_label(), "Resultados y acceso a cada acta")
     for _, row in matches.iterrows():
         home, away = club_map.get(str(row.home_club_id)), club_map.get(str(row.away_club_id))
+        completed = str(row.get("status_id")) == "6"
+        result_markup = (
+            f"{row.home_score}<i>:</i>{row.away_score}"
+            if completed else t("Programado")
+        )
         html(
             f"""<div class='card match-row{' sel' if row.match_id == selected_id else ''}'>
             <div class='date'>{escape(str(row.match_date))}<br>{escape(str(row.match_time))}</div>
             <div class='team home'><span>{escape(str(row.home_club_name))}</span>{crest(home, 42)}</div>
-            <div class='result'>{row.home_score}<i>:</i>{row.away_score}</div>
+            <div class='result{' pending' if not completed else ''}'>{result_markup}</div>
             <div class='team'>{crest(away, 42)}<span>{escape(str(row.away_club_name))}</span></div>
             <div class='meta'>{escape(str(row.playground))}</div></div>"""
         )
         st.button(
-            t("Acta abierta") if row.match_id == selected_id else t("Abrir acta"),
+            t("Acta abierta") if completed and row.match_id == selected_id else t("Abrir acta") if completed else t("Acta no disponible todavía"),
             key=f"match_{row.match_id}",
-            type="primary" if row.match_id == selected_id else "secondary",
+            type="primary" if completed and row.match_id == selected_id else "secondary",
+            disabled=not completed,
             on_click=go,
             kwargs={"match_id": row.match_id},
         )
@@ -1479,14 +1496,26 @@ def render_matches(data: dict[str, pd.DataFrame], club_map: dict[str, pd.Series]
     goal_lines = {"H": [], "A": []}
     for _, goal in events[events["event_type"].eq("goal")].sort_values("event_order").iterrows():
         goal_lines[goal["club_side"]].append(f"⚽ {escape(str(goal['player_name']))} {escape(str(goal['minute']))}'")
+    completed = str(match.get("status_id")) == "6"
+    score_markup = f"{match.home_score}<i>:</i>{match.away_score}" if completed else t("Programado")
+    info_markup = (
+        f"<span class='chip y'>HT {match.home_score_h1}-{match.away_score_h1}</span>"
+        f"<span class='chip'>{escape(str(match.playground))}</span><span class='chip'>{t('Asistencia')} {escape(str(match.attendance))}</span>"
+        if completed else f"<span class='chip y'>{t('Programado')}</span><span class='chip'>{escape(str(match.playground))}</span>"
+    )
     html(
         f"""<div class='board' style='margin-top:1.4rem'><div class='row'>
         <div class='team'>{crest(home, 116)}<h3>{escape(str(match.home_club_name))}</h3><div class='scorers'>{'<br>'.join(goal_lines['H'])}</div></div>
         <div class='mid'><div class='when'>{t('Jornada')} {escape(str(match.week_no))} · {escape(str(match.match_date))} · {escape(str(match.match_time))}</div>
-        <div class='big'>{match.home_score}<i>:</i>{match.away_score}</div>
-        <div class='info'><span class='chip y'>HT {match.home_score_h1}-{match.away_score_h1}</span><span class='chip'>{escape(str(match.playground))}</span><span class='chip'>{t('Asistencia')} {escape(str(match.attendance))}</span></div></div>
+        <div class='big'>{score_markup}</div>
+        <div class='info'>{info_markup}</div></div>
         <div class='team'>{crest(away, 116)}<h3>{escape(str(match.away_club_name))}</h3><div class='scorers'>{'<br>'.join(goal_lines['A'])}</div></div></div></div>"""
     )
+
+    if not completed:
+        section("Acta no disponible todavía", None)
+        html(f"<div class='empty'>{t('El acta oficial, las alineaciones y los eventos estarán disponibles tras el inicio del partido.')}</div>")
+        return
 
     section("Cronología", "Eventos oficiales del acta")
     html(timeline_html(events))
