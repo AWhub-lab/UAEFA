@@ -766,6 +766,7 @@ div[class*="st-key-crumb-"] .stButton>button:hover{background:rgba(255,210,31,.1
 .crumb-sep{display:grid;place-items:center;height:1.8rem;color:#b77d00;font-weight:800;font-size:1rem}
 .crumb-current{display:flex;align-items:center;min-height:1.8rem;color:var(--text);font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-key-player_back,.st-key-player_back .stButton{width:auto!important}.st-key-player_back .stButton>button{width:auto!important;min-height:2.45rem;padding:.42rem 1.05rem!important;border-radius:999px!important;font-size:.82rem!important;font-weight:800!important;box-shadow:0 5px 14px rgba(183,125,0,.2)}
+.st-key-competition_report_download,.st-key-competition_report_download .stDownloadButton{width:100%!important}.st-key-competition_report_download .stDownloadButton>button{width:100%!important;min-height:3.1rem;padding:.55rem 1.2rem!important;border:1px solid #f0bd00!important;border-radius:999px!important;background:linear-gradient(135deg,#ffd21f,#f4bd08)!important;color:#17120a!important;font-size:.9rem!important;font-weight:800!important;letter-spacing:.025em;box-shadow:0 9px 20px rgba(220,165,0,.24),inset 0 1px 0 rgba(255,255,255,.45);transition:transform .18s,box-shadow .18s}.st-key-competition_report_download .stDownloadButton>button:hover{background:linear-gradient(135deg,#ffe062,#ffd21f)!important;color:#17120a!important;transform:translateY(-2px);box-shadow:0 13px 24px rgba(220,165,0,.31)}
 /* ---------- inputs */
 [data-baseweb="input"],[data-baseweb="select"]>div{background:var(--s1)!important;border-color:var(--line)!important;border-radius:12px!important}
 [data-baseweb="input"] input,[data-baseweb="select"] *,[data-baseweb="select"] svg{color:var(--text)!important;fill:var(--text)!important}
@@ -1298,7 +1299,7 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
         ("Jugadores", len(data["players"]), "#4c9aff"),
     ])
     if COMPETITION_REPORT_PATH.exists():
-        download_column, _ = st.columns([1.7, 3.3])
+        _, download_column, _ = st.columns([1.25, 2.5, 1.25])
         with download_column:
             st.download_button(
                 t("Descargar informe de la competición"),
@@ -1309,6 +1310,7 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
                 icon=":material/download:",
                 type="primary",
                 use_container_width=True,
+                key="competition_report_download",
             )
     section("Clasificación provisional", f"Acumulada hasta {scope_label()}")
     standings_table(standings, club_map)
