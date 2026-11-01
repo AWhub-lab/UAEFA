@@ -845,7 +845,7 @@ div[data-testid="stElementContainer"]:has(.scope-panel) + div [data-baseweb="sel
 .crumbs span.sep{color:var(--yellow)}.crumbs b{color:var(--text);font-weight:600}
 .banner{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:1.6rem 2rem;border-radius:22px;border:1px solid var(--line);background:linear-gradient(120deg,#ffffff 0%,#f6f7f4 55%,#fff8e5 130%)}
 .banner::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(180deg,var(--yellow),var(--yellow-d))}
-.banner .num{font-family:'Barlow Condensed',sans-serif;font-size:7rem;font-weight:800;line-height:.8;color:rgba(255,210,31,.09);position:absolute;right:2rem;top:1.2rem;letter-spacing:.02em}
+.banner .num{font-family:'Barlow Condensed',sans-serif;font-size:7rem;font-weight:800;line-height:.8;color:rgba(134,91,0,.19);text-shadow:0 1px 0 rgba(255,255,255,.58);position:absolute;right:2rem;top:1.2rem;letter-spacing:.02em}
 .banner .kicker{font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:var(--yellow);font-weight:600}
 .banner h1{font-size:3.1rem;text-transform:uppercase;margin:.35rem 0 .3rem;line-height:.95;font-weight:800}
 .banner p{margin:0;color:var(--muted);max-width:640px;font-size:.92rem}
