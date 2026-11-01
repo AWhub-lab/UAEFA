@@ -130,10 +130,17 @@ python3 scripts/publish_to_drive.py
 [drive]
 root_folder_id = "your-drive-root-folder-id"
 service_account_json = '''{"type":"service_account", ...}'''
+
+[access]
+password = "choose-a-strong-private-password"
 ```
 
 The deployed app downloads the approved Drive snapshot only when it does not
 exist locally. The visible `Refresh data` button checks Drive again and then
 clears Streamlit's data cache. The report is served to the user's browser only
 after they choose the in-app download button.
+
+`access.password` is optional for a local working copy, but required for the
+shared deployment. It is never stored in GitHub or Google Drive; changing the
+secret immediately changes the password required by the app.
 

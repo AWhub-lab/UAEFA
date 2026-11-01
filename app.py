@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import io
 import json
 import os
@@ -48,6 +49,51 @@ def ensure_runtime_snapshot(force: bool = False) -> dict[str, object] | None:
     if not settings or (local_snapshot_available() and not force):
         return None
     return sync_runtime_snapshot(PROJECT_ROOT, settings)
+
+
+def configured_app_password() -> str:
+    """Read the optional access password without ever rendering its value."""
+    try:
+        if "access" in st.secrets:
+            password = str(st.secrets["access"].get("password", "")).strip()
+            if password:
+                return password
+    except StreamlitSecretNotFoundError:
+        pass
+    return os.getenv("APP_PASSWORD", "").strip()
+
+
+def require_app_access() -> bool:
+    """Render the private Al Wasl access screen when a password is configured."""
+    password = configured_app_password()
+    if not password or st.session_state.get("app_access_granted", False):
+        return True
+
+    st.markdown(
+        """
+        <style>
+        .access-shell{max-width:540px;margin:11vh auto 0;padding:2.6rem 2.35rem;
+          border:1px solid #e1d4a6;border-radius:24px;background:linear-gradient(145deg,#fffdf7,#f7f3e8);
+          box-shadow:0 20px 54px rgba(88,62,6,.13);text-align:center}
+        .access-kicker{margin:0 0 .65rem;color:#ae7800;font-size:.72rem;font-weight:800;
+          letter-spacing:.2em;text-transform:uppercase}.access-title{margin:0;color:#111315;
+          font-family:'Barlow Condensed',sans-serif;font-size:2.35rem;font-weight:800;text-transform:uppercase}
+        .access-copy{margin:.6rem auto 0;max-width:380px;color:#62666b;font-size:.9rem;line-height:1.55}
+        </style>
+        <div class='access-shell'><p class='access-kicker'>Al Wasl Football Intelligence</p>
+        <h1 class='access-title'>Private access</h1><p class='access-copy'>Enter the access password to open the UAE First Division hub.</p></div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.form("app_access_form"):
+        entered = st.text_input("Access password", type="password", label_visibility="collapsed", placeholder="Access password")
+        submitted = st.form_submit_button("Open intelligence hub", type="primary", use_container_width=True)
+    if submitted:
+        if hmac.compare_digest(entered, password):
+            st.session_state["app_access_granted"] = True
+            st.rerun()
+        st.error("Incorrect password. Please try again.")
+    return False
 
 
 # Git deliberately excludes data. A hosted app receives its approved snapshot
@@ -2434,4 +2480,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if require_app_access():
+        main()
