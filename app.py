@@ -1,4 +1,4 @@
-"""Al Wasl Football Intelligence | UAE First Division Hub (local Streamlit viewer)."""
+"""Al Wasl Football Intelligence | UAE competition hub (Streamlit viewer)."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def require_app_access() -> bool:
         </style>
         <div class='access-shell'><img class='access-brand' src='__BRAND_LOGO__' alt='Al Wasl'>
         <p class='access-kicker'>Al Wasl Football Intelligence</p>
-        <h1 class='access-title'>Private access</h1><p class='access-copy'>Enter the access password to open the UAE First Division hub.</p></div>
+        <h1 class='access-title'>Private access</h1><p class='access-copy'>Enter the access password to open the Al Wasl UAE competition hub.</p></div>
         """.replace("__BRAND_LOGO__", brand_logo),
         unsafe_allow_html=True,
     )
@@ -264,7 +264,7 @@ def translate_markup(markup: str) -> str:
     return markup
 
 st.set_page_config(
-    page_title="Al Wasl | UAE First Division Hub",
+    page_title="Al Wasl | UAE Competition Hub",
     page_icon=str(BRAND_ROOT / "al_wasl.png"),
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -1188,7 +1188,7 @@ def app_breadcrumbs(page: str, trail: list[str]) -> None:
     """Clickable trail shared by every app screen, with the current item as text."""
     reset = {"player_id": None, "player_origin": None, "player_scroll_top": True}
     items: list[tuple[str, str | None]] = [
-        ("UAE First Division", "Clasificación"),
+        (ACTIVE_COMPETITION.name, "Clasificación"),
         (SEASON, "Clasificación"),
         (scope_label(), "Partidos"),
     ]
@@ -1394,7 +1394,7 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
             st.download_button(
                 t("Descargar informe de la competición"),
                 data=COMPETITION_REPORT_PATH.read_bytes(),
-                file_name="uae_first_division_competition_report_en.pdf",
+                file_name=f"{ACTIVE_COMPETITION.directory}_competition_report_en.pdf",
                 mime="application/pdf",
                 help=t("Informe PDF actualizado de la categoría"),
                 icon=":material/download:",
@@ -2480,6 +2480,17 @@ def footer() -> None:
         f"""<div class='footer'><div class='fl'><img src='{brand_uri("al_wasl.png")}' alt=''></div>
         <span>{t('Datos locales en Parquet · actualización incremental disponible.')}</span></div>"""
     )
+
+
+def reset_competition_context() -> None:
+    """Clear selection-specific UI state before Streamlit loads another league."""
+    st.session_state.update(
+        page="Clasificación", matchday=None, player_id=None, player_origin=None,
+        player_scroll_top=True, shown=GRID_PAGE,
+    )
+    st.cache_data.clear()
+
+
 def main() -> None:
     st.html(CSS)
     scroll_to_top_if_needed()
@@ -2498,7 +2509,15 @@ def main() -> None:
     if st.session_state.get("matchday") not in available_weeks:
         # The day-to-day operational view opens on the latest completed matchday.
         st.session_state["matchday"] = available_weeks[-1]
-    navigation, scope_control, refresh, language_control = st.columns([4.0, 1.75, 1.2, 1.05], gap="small", vertical_alignment="bottom")
+    competition_control, navigation, scope_control, refresh, language_control = st.columns([1.65, 3.35, 1.75, 1.2, 1.05], gap="small", vertical_alignment="bottom")
+    competition_control.selectbox(
+        "Competition",
+        list(COMPETITIONS),
+        key="competition_key",
+        format_func=lambda key: COMPETITIONS[key].name,
+        on_change=reset_competition_context,
+        label_visibility="collapsed",
+    )
     page = navigation.segmented_control(
         "Navegación", list(PAGES), key="page", label_visibility="collapsed",
         format_func=lambda name: f"{PAGES[name][1]} {t(name)}",
