@@ -11,9 +11,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
+UTC = timezone.utc
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
