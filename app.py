@@ -928,11 +928,13 @@ div[class*="st-key-competition_key"] [data-baseweb="select"] span{font-family:'B
 .navigation-row span{flex:0 0 auto;font-size:.61rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--yellow-d)}
 .external-profile{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;padding:.85rem;border:1px solid #cfe0f8;border-radius:16px;background:linear-gradient(135deg,#f7fbff,#fff)}
 .external-profile .fact{min-height:68px;padding:.65rem .75rem;border-radius:11px;background:#fff;border:1px solid rgba(76,154,255,.18)}
-.external-profile small,.career-table th{display:block;font-size:.61rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.external-profile small{display:block;font-size:.61rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
 .external-profile b{display:block;margin-top:.22rem;font-family:'Barlow Condensed',sans-serif;font-size:1.12rem;letter-spacing:.03em;color:var(--text)}
-.career-table{width:100%;border-collapse:separate;border-spacing:0 7px}
-.career-table th{padding:0 .8rem .25rem;text-align:left}.career-table td{padding:.65rem .8rem;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.82rem;font-weight:600}.career-table td:first-child{border-left:3px solid #4c9aff;border-radius:10px 0 0 10px;font-family:'Barlow Condensed',sans-serif;font-size:1rem}.career-table td:last-child{border-right:1px solid var(--line);border-radius:0 10px 10px 0}.career-table .num{text-align:center;font-variant-numeric:tabular-nums}.career-source{margin:.2rem 0 0;color:var(--muted);font-size:.72rem}
-@media(max-width:760px){.external-profile{grid-template-columns:repeat(2,minmax(0,1fr))}.career-table{display:block;overflow-x:auto;white-space:nowrap}}
+.career-wrap{overflow-x:auto;padding:.65rem;border:1px solid #dce8f7;border-radius:16px;background:linear-gradient(135deg,#f6faff,#fff 58%)}
+.career-table{width:100%;min-width:690px;table-layout:fixed;border-collapse:separate;border-spacing:0 7px}
+.career-table th{display:table-cell;padding:.2rem .8rem .55rem;text-align:left;vertical-align:bottom;font-size:.6rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#627286;white-space:nowrap}.career-table th:not(:first-child){text-align:center}.career-table th:first-child{width:34%}
+.career-table td{padding:.7rem .8rem;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.82rem;font-weight:600}.career-table td:first-child{border-left:4px solid #4c9aff;border-radius:10px 0 0 10px;font-family:'Barlow Condensed',sans-serif;font-size:1.02rem}.career-table td:last-child{border-right:1px solid var(--line);border-radius:0 10px 10px 0}.career-table .num{text-align:center;font-variant-numeric:tabular-nums;color:#26364b}.career-table tbody tr{filter:drop-shadow(0 3px 5px rgba(26,52,84,.035))}.career-table tbody tr:hover td{background:#f4f9ff}
+@media(max-width:760px){.external-profile{grid-template-columns:repeat(2,minmax(0,1fr))}.career-wrap{margin:0 -.2rem}}
 /* ---------- page banner */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.3rem 0 .6rem;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .crumbs span.sep{color:var(--yellow)}.crumbs b{color:var(--text);font-weight:600}
@@ -2180,14 +2182,14 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
         section("Enriquecimiento validado", "Datos externos · identidad confirmada con UAEFA")
         kpis(external_metrics)
     profile_facts = [
-        (L("Nacionalidad BeSoccer", "BeSoccer nationality"), player.get("besoccer_nationality")),
+        (L("Nacionalidad adicional", "Additional nationality"), player.get("besoccer_nationality")),
         (L("Lugar de nacimiento", "Place of birth"), player.get("birth_place")),
         (L("Altura", "Height"), f"{player.get('height_cm')} cm" if pd.notna(player.get("height_cm")) else None),
         (L("Peso", "Weight"), f"{player.get('weight_kg')} kg" if pd.notna(player.get("weight_kg")) else None),
     ]
     profile_facts = [(label, value) for label, value in profile_facts if value is not None and str(value).strip() not in {"", "nan", "None"}]
     if profile_facts:
-        section(L("Perfil externo validado", "Validated external profile"), L("BeSoccer · no sustituye los datos oficiales UAEFA", "BeSoccer · does not replace official UAEFA data"))
+        section(L("Perfil adicional validado", "Validated additional profile"), L("No sustituye los datos oficiales UAEFA", "Does not replace official UAEFA data"))
         facts = "".join(
             f"<div class='fact'><small>{escape(str(label))}</small><b>{escape(str(value))}</b></div>"
             for label, value in profile_facts
@@ -2201,7 +2203,7 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
     if value_history:
         history = pd.DataFrame(value_history)
         history["Etiqueta"] = history["value_eur"].map(market_value)
-        section("Evolución de valor de mercado", "Datos externos · histórico publicado")
+        section("Evolución de valor de mercado", "Histórico publicado validado")
         st.altair_chart(
             alt.layer(
                 alt.Chart(history).mark_line(color="#2fd27a", strokeWidth=3, point=alt.OverlayMarkDef(filled=True, size=70)).encode(
@@ -2225,7 +2227,7 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
     if elo_history:
         history = pd.DataFrame(elo_history)
         history["Etiqueta"] = history["elo"].astype(int).astype(str)
-        section("Evolución de Elo", "Datos externos · histórico publicado del jugador")
+        section("Evolución de Elo", "Histórico publicado validado del jugador")
         st.altair_chart(
             alt.layer(
                 alt.Chart(history).mark_line(color="#4c9aff", strokeWidth=3, point=alt.OverlayMarkDef(filled=True, size=70)).encode(
@@ -2245,7 +2247,7 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
         player_career = career[career["uaefa_player_id"].astype(str).eq(str(player.player_id))].copy()
         if not player_career.empty:
             player_career = player_career.sort_values(["seasons", "minutes", "matches"], ascending=False)
-            section(L("Trayectoria por clubes", "Club career"), L("BeSoccer · historial publicado del jugador validado", "BeSoccer · published history for the validated player"))
+            section(L("Trayectoria por clubes", "Club career"), L("Historial publicado del jugador validado", "Published history for the validated player"))
             columns = [
                 ("club_name", L("Club", "Club"), ""), ("seasons", L("Temp.", "Seasons"), "num"),
                 ("matches", L("PJ", "Apps"), "num"), ("starts", L("Tit.", "Starts"), "num"),
@@ -2260,7 +2262,7 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
                 ) + "</tr>"
                 for _, row in player_career.iterrows()
             )
-            html(f"<table class='career-table'><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>")
+            html(f"<div class='career-wrap'><table class='career-table'><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div>")
     pid = player.player_id
     appearances = data["appearances"][data["appearances"]["player_id"].eq(pid)].merge(data["matches"], on="match_id", how="left")
     render_player_season(data, player, appearances, club_map)
