@@ -845,17 +845,21 @@ def market_value(value: object) -> str | None:
 
 
 def identity_chips(player: pd.Series, compact: bool = False) -> str:
-    """Keep UAEFA registration visible alongside the official nationality."""
+    """Show UAEFA affiliation only for the official UAE-linked categories."""
     country = player.get("nationality_official")
     label = str(country) if country is not None and not pd.isna(country) else str(player.get("nationality_category", "-"))
     country_chip = (
         f"<span class='country-flag' title='Nacionalidad: {escape(label)}' "
         f"aria-label='Nacionalidad: {escape(label)}'>{country_flag(label)}</span>"
     )
-    if label.strip().lower() in {"united arab emirates", "u a e", "uae"}:
-        return f"<span class='chip nat' title='Registro oficial UAEFA · Nacionalidad: United Arab Emirates'>{UAE_FLAG} UAEFA</span>"
-    registry = f"<span class='chip nat' title='Registro oficial UAEFA · La bandera contigua indica la nacionalidad publicada'>{UAE_FLAG} UAEFA</span>"
-    return f"{registry}{country_chip}"
+    affiliation = {
+        "uae citizen": L("Ciudadano EAU", "UAE citizen"),
+        "citizen child": L("Hijo de ciudadano", "Citizen child"),
+        "uae born": L("Nacido en EAU", "UAE born"),
+    }.get(str(player.get("nationality_category", "")).strip().lower())
+    if affiliation:
+        return f"<span class='chip nat' title='Estatus oficial UAEFA: {escape(affiliation)}'>{UAE_FLAG} {escape(affiliation)}</span>"
+    return country_chip
 
 
 def is_emirati(player: pd.Series) -> bool:
@@ -2443,7 +2447,7 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
 
                     - The photo and squad number identify the player in official match reports.
                     - The border and soft shading identify the role: goalkeeper, defender, midfielder or attacker.
-                    - `UAEFA` confirms the player is in the official ecosystem; the adjacent flag shows the published nationality.
+                    - The UAE flag label appears only for `UAE Citizen`, `Citizen Child` or `UAE Born`; other players display their published nationality flag.
                     - Birth year displays the official year and age calculated using the visible matchday cut-off date.
                     - The coloured circle is the **individual Elo** when it is published and the identity match is validated: red is the lower range and green the upper range among available Elo values.
                     - `PJ`, `MIN`, `Goles`, `TA` and `TR` are official UAEFA matches played, minutes, goals, yellow cards and red cards.
@@ -2451,7 +2455,7 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
 
                     - La foto y el dorsal identifican al jugador en las actas oficiales.
                     - El borde y sombreado suave indican su posición: portero, defensa, mediocampista o atacante.
-                    - `UAEFA` confirma su presencia en el ecosistema oficial; la bandera contigua indica la nacionalidad publicada.
+                    - La etiqueta con bandera EAU solo aparece en `UAE Citizen`, `Citizen Child` o `UAE Born`; el resto muestra la bandera de su nacionalidad publicada.
                     - El nacimiento muestra el año oficial y la edad calculada con la fecha de corte de la jornada visible.
                     - El círculo de color es el **Elo individual** cuando está publicado y el cruce de identidad está validado: rojo representa el tramo inferior y verde el superior dentro de los Elo disponibles.
                     - `PJ`, `MIN`, `Goles`, `TA` y `TR` son partidos jugados, minutos, goles, tarjetas amarillas y tarjetas rojas oficiales UAEFA.
