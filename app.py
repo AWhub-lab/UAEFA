@@ -331,6 +331,9 @@ def load_data(competition_key: str) -> dict[str, pd.DataFrame]:
         profiles["player_id"] = profiles["player_id"].astype(str)
         frames["players"] = frames["players"].merge(profiles, on="player_id", how="left")
 
+    frames["career"] = pd.DataFrame(
+        columns=["uaefa_player_id", "besoccer_player_id", "club_name", "club_url", "seasons", "matches", "starts", "minutes", "goals", "cards"]
+    )
     crosswalk_path = EXTERNAL_ROOT / "player_crosswalk_validated.parquet"
     validated_profiles_path = EXTERNAL_ROOT / "player_profiles_validated.parquet"
     besoccer_profiles_path = (
@@ -342,13 +345,17 @@ def load_data(competition_key: str) -> dict[str, pd.DataFrame]:
         # verified historic players even after they leave a current squad page.
         enrichment = pd.read_parquet(validated_profiles_path).copy()
         enrichment["player_id"] = enrichment["uaefa_player_id"].astype(str)
-        enrichment = enrichment[
-            [
-                "player_id", "market_value_current_eur", "market_value_history_json",
-                "elo_current", "elo_history_json", "position_main", "positions_secondary_json",
-            ]
-        ]
+        enrichment = enrichment.reindex(columns=[
+            "player_id", "market_value_current_eur", "market_value_history_json",
+            "elo_current", "elo_history_json", "position_main", "positions_secondary_json",
+            "nationality", "birth_place", "height_cm", "weight_kg", "source_url",
+        ]).rename(columns={"nationality": "besoccer_nationality"})
         frames["players"] = frames["players"].merge(enrichment, on="player_id", how="left")
+        career_path = EXTERNAL_ROOT / "player_career.parquet"
+        if career_path.exists():
+            career = pd.read_parquet(career_path).copy()
+            career["uaefa_player_id"] = career["uaefa_player_id"].astype(str)
+            frames["career"] = career[career["uaefa_player_id"].isin(set(enrichment["player_id"]))].copy()
     elif crosswalk_path.exists() and besoccer_profiles_path.exists():
         # Legacy fallback for a local dataset created before the validated file.
         crosswalk = pd.read_parquet(crosswalk_path)
@@ -361,13 +368,17 @@ def load_data(competition_key: str) -> dict[str, pd.DataFrame]:
         besoccer_profiles = pd.read_parquet(besoccer_profiles_path).copy()
         besoccer_profiles["uaefa_player_id"] = besoccer_profiles["uaefa_player_id"].astype(str)
         enrichment = approved.merge(besoccer_profiles, on="uaefa_player_id", how="inner")
-        enrichment = enrichment.rename(columns={"uaefa_player_id": "player_id"})[
-            [
-                "player_id", "market_value_current_eur", "market_value_history_json",
-                "elo_current", "elo_history_json", "position_main", "positions_secondary_json",
-            ]
-        ]
+        enrichment = enrichment.rename(columns={"uaefa_player_id": "player_id"}).reindex(columns=[
+            "player_id", "market_value_current_eur", "market_value_history_json",
+            "elo_current", "elo_history_json", "position_main", "positions_secondary_json",
+            "nationality", "birth_place", "height_cm", "weight_kg", "source_url",
+        ]).rename(columns={"nationality": "besoccer_nationality"})
         frames["players"] = frames["players"].merge(enrichment, on="player_id", how="left")
+        career_path = EXTERNAL_ROOT / "player_career.parquet"
+        if career_path.exists():
+            career = pd.read_parquet(career_path).copy()
+            career["uaefa_player_id"] = career["uaefa_player_id"].astype(str)
+            frames["career"] = career[career["uaefa_player_id"].isin(set(enrichment["player_id"]))].copy()
 
     teams_path = EXTERNAL_ROOT / "teams.parquet"
     if teams_path.exists():
@@ -394,6 +405,7 @@ def data_for_week(data: dict[str, pd.DataFrame], week: int | None) -> dict[str, 
         "appearances": appearances,
         "events": data["events"][data["events"]["match_id"].isin(match_ids)].copy(),
         "staff": data["staff"][data["staff"]["match_id"].isin(match_ids)].copy(),
+        "career": data["career"].copy(),
     }
 
 
@@ -419,6 +431,7 @@ def data_through_week(data: dict[str, pd.DataFrame], week: int) -> dict[str, pd.
         "appearances": appearances,
         "events": data["events"][data["events"]["match_id"].isin(match_ids)].copy(),
         "staff": data["staff"][data["staff"]["match_id"].isin(match_ids)].copy(),
+        "career": data["career"].copy(),
     }
 
 
@@ -899,6 +912,13 @@ div[class*="st-key-competition_key"] [data-baseweb="select"]>div{min-height:44px
 div[class*="st-key-competition_key"] [data-baseweb="select"] span{font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;letter-spacing:.045em}
 .navigation-row{display:flex;align-items:center;gap:.7rem;padding:.5rem .75rem;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.72);box-shadow:0 8px 22px rgba(17,19,21,.04)}
 .navigation-row span{flex:0 0 auto;font-size:.61rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--yellow-d)}
+.external-profile{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;padding:.85rem;border:1px solid #cfe0f8;border-radius:16px;background:linear-gradient(135deg,#f7fbff,#fff)}
+.external-profile .fact{min-height:68px;padding:.65rem .75rem;border-radius:11px;background:#fff;border:1px solid rgba(76,154,255,.18)}
+.external-profile small,.career-table th{display:block;font-size:.61rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.external-profile b{display:block;margin-top:.22rem;font-family:'Barlow Condensed',sans-serif;font-size:1.12rem;letter-spacing:.03em;color:var(--text)}
+.career-table{width:100%;border-collapse:separate;border-spacing:0 7px}
+.career-table th{padding:0 .8rem .25rem;text-align:left}.career-table td{padding:.65rem .8rem;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.82rem;font-weight:600}.career-table td:first-child{border-left:3px solid #4c9aff;border-radius:10px 0 0 10px;font-family:'Barlow Condensed',sans-serif;font-size:1rem}.career-table td:last-child{border-right:1px solid var(--line);border-radius:0 10px 10px 0}.career-table .num{text-align:center;font-variant-numeric:tabular-nums}.career-source{margin:.2rem 0 0;color:var(--muted);font-size:.72rem}
+@media(max-width:760px){.external-profile{grid-template-columns:repeat(2,minmax(0,1fr))}.career-table{display:block;overflow-x:auto;white-space:nowrap}}
 /* ---------- page banner */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.3rem 0 .6rem;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .crumbs span.sep{color:var(--yellow)}.crumbs b{color:var(--text);font-weight:600}
@@ -2145,6 +2165,20 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
     if external_metrics:
         section("Enriquecimiento validado", "Datos externos · identidad confirmada con UAEFA")
         kpis(external_metrics)
+    profile_facts = [
+        (L("Nacionalidad BeSoccer", "BeSoccer nationality"), player.get("besoccer_nationality")),
+        (L("Lugar de nacimiento", "Place of birth"), player.get("birth_place")),
+        (L("Altura", "Height"), f"{player.get('height_cm')} cm" if pd.notna(player.get("height_cm")) else None),
+        (L("Peso", "Weight"), f"{player.get('weight_kg')} kg" if pd.notna(player.get("weight_kg")) else None),
+    ]
+    profile_facts = [(label, value) for label, value in profile_facts if value is not None and str(value).strip() not in {"", "nan", "None"}]
+    if profile_facts:
+        section(L("Perfil externo validado", "Validated external profile"), L("BeSoccer · no sustituye los datos oficiales UAEFA", "BeSoccer · does not replace official UAEFA data"))
+        facts = "".join(
+            f"<div class='fact'><small>{escape(str(label))}</small><b>{escape(str(value))}</b></div>"
+            for label, value in profile_facts
+        )
+        html(f"<div class='external-profile'>{facts}</div>")
     raw_history = player.get("market_value_history_json")
     try:
         value_history = json.loads(raw_history) if isinstance(raw_history, str) else []
@@ -2192,6 +2226,27 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
             ),
             width="stretch",
         )
+    career = data.get("career", pd.DataFrame())
+    if not career.empty and "uaefa_player_id" in career:
+        player_career = career[career["uaefa_player_id"].astype(str).eq(str(player.player_id))].copy()
+        if not player_career.empty:
+            player_career = player_career.sort_values(["seasons", "minutes", "matches"], ascending=False)
+            section(L("Trayectoria por clubes", "Club career"), L("BeSoccer · historial publicado del jugador validado", "BeSoccer · published history for the validated player"))
+            columns = [
+                ("club_name", L("Club", "Club"), ""), ("seasons", L("Temp.", "Seasons"), "num"),
+                ("matches", L("PJ", "Apps"), "num"), ("starts", L("Tit.", "Starts"), "num"),
+                ("minutes", L("Min.", "Minutes"), "num"), ("goals", L("Goles", "Goals"), "num"),
+                ("cards", L("Tarjetas", "Cards"), "num"),
+            ]
+            head = "".join(f"<th>{escape(label)}</th>" for _, label, _ in columns)
+            rows = "".join(
+                "<tr>" + "".join(
+                    f"<td class='{css}'>{escape(str(row.get(field, '—')) if pd.notna(row.get(field)) else '—')}</td>"
+                    for field, _, css in columns
+                ) + "</tr>"
+                for _, row in player_career.iterrows()
+            )
+            html(f"<table class='career-table'><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>")
     pid = player.player_id
     appearances = data["appearances"][data["appearances"]["player_id"].eq(pid)].merge(data["matches"], on="match_id", how="left")
     render_player_season(data, player, appearances, club_map)

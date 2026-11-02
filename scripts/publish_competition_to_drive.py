@@ -114,6 +114,7 @@ def main() -> int:
 
     directory = DATASETS[args.competition]
     processed = PROJECT_ROOT / "data" / "processed" / directory / "current"
+    external = PROJECT_ROOT / "data" / "external" / "besoccer" / directory
     media_bundle = build_media_bundle(args.competition, directory)
     raw_bundle = build_raw_bundle(directory) if args.include_raw else None
     summary_path = processed / "summary.json"
@@ -122,9 +123,18 @@ def main() -> int:
 
     service = publisher_service_from_oauth(PROJECT_ROOT)
     table_root = ensure_path(service, settings.root_folder_id, ["02_Processed data", "competitions", directory, "current", "tables"])
+    besoccer_root = ensure_path(service, settings.root_folder_id, ["02_Processed data", "competitions", directory, "current", "besoccer"])
     raw_root = ensure_path(service, settings.root_folder_id, ["01_Raw data", "competitions", directory]) if raw_bundle else None
     assets_root = ensure_path(service, settings.root_folder_id, ["03_Assets", "competitions", directory]) if media_bundle else None
     records, uploaded, skipped = publish_tree(service, processed, table_root, "tables", {})
+    enrichment_files = {"player_profiles_validated.parquet", "player_career.parquet", "teams.parquet"}
+    if external.exists():
+        enrichment_records, enrichment_uploaded, enrichment_skipped = publish_tree(
+            service, external, besoccer_root, "besoccer", {}, enrichment_files
+        )
+        records.extend(enrichment_records)
+        uploaded += enrichment_uploaded
+        skipped += enrichment_skipped
     raw_record = None
     if raw_root and raw_bundle:
         upload_file(service, raw_root, raw_bundle)

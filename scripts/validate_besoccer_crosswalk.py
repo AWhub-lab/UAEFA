@@ -6,20 +6,29 @@ requests and will downgrade a link if both sources publish different DOBs.
 
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-UAEFA_ROOT = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027" / "current"
-BESOCCER_ROOT = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def main() -> None:
-    crosswalk = pd.read_parquet(BESOCCER_ROOT / "player_crosswalk.parquet")
-    uaefa_profiles = pd.read_parquet(UAEFA_ROOT / "player_profiles_uaefa.parquet")
-    besoccer_profiles = pd.read_parquet(BESOCCER_ROOT / "player_profiles.parquet")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    args = parser.parse_args()
+    competition = get_competition(args.competition)
+    uaefa_root = PROJECT_ROOT / "data" / "processed" / competition.directory / "current"
+    besoccer_root = PROJECT_ROOT / "data" / "external" / "besoccer" / competition.directory
+    crosswalk = pd.read_parquet(besoccer_root / "player_crosswalk.parquet")
+    uaefa_profiles = pd.read_parquet(uaefa_root / "player_profiles_uaefa.parquet")
+    besoccer_profiles = pd.read_parquet(besoccer_root / "player_profiles.parquet")
 
     crosswalk = crosswalk.merge(
         uaefa_profiles[["player_id", "birth_date_official"]],
@@ -41,7 +50,7 @@ def main() -> None:
     crosswalk.loc[conflicting_dob, "identity_validation"] = "do_not_use_dob_conflict"
     crosswalk.loc[conflicting_dob, "status"] = "review"
 
-    output = BESOCCER_ROOT / "player_crosswalk_validated.parquet"
+    output = besoccer_root / "player_crosswalk_validated.parquet"
     crosswalk.to_parquet(output, index=False)
     print(
         {

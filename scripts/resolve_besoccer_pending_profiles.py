@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -13,16 +14,17 @@ import sys
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-EXTERNAL = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.besoccer import normalize_name
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def recover_historical_profiles(
     resolved: pd.DataFrame,
     original_profiles: pd.DataFrame,
     candidates: pd.DataFrame,
+    official_root: Path,
 ) -> tuple[pd.DataFrame, int, int]:
     """Keep historic enrichment only where UAEFA identity evidence is still strong.
 
@@ -31,7 +33,7 @@ def recover_historical_profiles(
     Those profiles remain valid only with an exact DOB plus a strong name
     comparison; mismatching DOBs are deliberately never carried forward.
     """
-    official = pd.read_parquet(EXTERNAL.parents[2] / "processed" / "first_division_2026_2027" / "current" / "player_profiles_uaefa.parquet")
+    official = pd.read_parquet(official_root / "player_profiles_uaefa.parquet")
     official["uaefa_player_id"] = official["player_id"].astype(str)
     official_ids = set(resolved["uaefa_player_id"].astype(str))
     used_candidate_ids = set(resolved["besoccer_player_id"].dropna().astype(str))
@@ -98,9 +100,15 @@ def recover_historical_profiles(
 
 
 def main() -> None:
-    crosswalk = pd.read_parquet(EXTERNAL / "player_crosswalk_validated.parquet")
-    original_profiles = pd.read_parquet(EXTERNAL / "player_profiles.parquet")
-    candidate_path = EXTERNAL / "pending_candidate_profiles.parquet"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    args = parser.parse_args()
+    competition = get_competition(args.competition)
+    external = PROJECT_ROOT / "data" / "external" / "besoccer" / competition.directory
+    official_root = PROJECT_ROOT / "data" / "processed" / competition.directory / "current"
+    crosswalk = pd.read_parquet(external / "player_crosswalk_validated.parquet")
+    original_profiles = pd.read_parquet(external / "player_profiles.parquet")
+    candidate_path = external / "pending_candidate_profiles.parquet"
     candidates = pd.read_parquet(candidate_path) if candidate_path.exists() else pd.DataFrame()
 
     if not candidates.empty:
@@ -159,10 +167,10 @@ def main() -> None:
         resolved = pd.concat([existing, confirmed_candidates], ignore_index=True).drop_duplicates("uaefa_player_id", keep="last")
 
     resolved, recovered_original, recovered_candidate = recover_historical_profiles(
-        resolved, original_profiles, candidates
+        resolved, original_profiles, candidates, official_root
     )
-    crosswalk.to_parquet(EXTERNAL / "player_crosswalk_validated.parquet", index=False)
-    resolved.to_parquet(EXTERNAL / "player_profiles_validated.parquet", index=False)
+    crosswalk.to_parquet(external / "player_crosswalk_validated.parquet", index=False)
+    resolved.to_parquet(external / "player_profiles_validated.parquet", index=False)
     summary = {
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "candidate_profiles_available": int(len(candidates)),
@@ -171,7 +179,7 @@ def main() -> None:
         "profiles_with_elo": int(resolved["elo_current"].notna().sum()),
         "historical_profiles_recovered": recovered_original + recovered_candidate,
     }
-    (EXTERNAL / "player_profiles_validated_summary.json").write_text(
+    (external / "player_profiles_validated_summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.besoccer import AccessLimitedError, BeSoccerClient, parse_player_profile
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def quantity_value(value: object) -> str | None:
@@ -45,7 +47,11 @@ def profile_row(profile: dict[str, object]) -> dict[str, object]:
 
 
 def main() -> None:
-    external = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    args = parser.parse_args()
+    competition = get_competition(args.competition)
+    external = PROJECT_ROOT / "data" / "external" / "besoccer" / competition.directory
     crosswalk = pd.read_parquet(external / "player_crosswalk_validated.parquet")
     pending = crosswalk[crosswalk["identity_validation"].eq("review_required")].copy()
     pending = pending.drop_duplicates("besoccer_player_id")

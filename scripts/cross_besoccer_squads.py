@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,11 +19,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.besoccer import player_crosswalk_candidates
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def main() -> None:
-    processed = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027" / "current"
-    external = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    args = parser.parse_args()
+    competition = get_competition(args.competition)
+    processed = PROJECT_ROOT / "data" / "processed" / competition.directory / "current"
+    external = PROJECT_ROOT / "data" / "external" / "besoccer" / competition.directory
     output = external / "player_crosswalk.parquet"
 
     players = pd.read_parquet(processed / "players.parquet")

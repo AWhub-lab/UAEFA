@@ -15,20 +15,30 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.besoccer import AccessLimitedError, BASE_URL, BeSoccerClient, parse_squad
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    parser.add_argument("--mapping", type=Path, help="Approved UAEFA-to-BeSoccer team mapping JSON.")
     parser.add_argument("--refresh", action="store_true", help="Refresh each mapped public squad page once instead of using the cache.")
     parser.add_argument("--min-delay", type=float, default=12.0)
     parser.add_argument("--max-delay", type=float, default=18.0)
     args = parser.parse_args()
     if args.min_delay <= 0 or args.max_delay < args.min_delay:
         parser.error("Use positive delays where --max-delay is at least --min-delay.")
-    season_root = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027" / "current"
-    config = json.loads((PROJECT_ROOT / "data" / "external" / "besoccer" / "team_mappings_2026_2027.json").read_text())
+    competition = get_competition(args.competition)
+    season_root = PROJECT_ROOT / "data" / "processed" / competition.directory / "current"
+    mapping_path = args.mapping or (
+        PROJECT_ROOT / "data" / "external" / "besoccer" /
+        ("team_mappings_2026_2027.json" if competition.key == "first" else f"team_mappings_{competition.key}_2026_2027.json")
+    )
+    if not mapping_path.exists():
+        parser.error(f"Approved team mapping is required: {mapping_path}")
+    config = json.loads(mapping_path.read_text())
     raw_root = PROJECT_ROOT / "data" / "raw" / "besoccer" / "squads"
-    output_root = PROJECT_ROOT / "data" / "external" / "besoccer" / "first_division_2026_2027"
+    output_root = PROJECT_ROOT / "data" / "external" / "besoccer" / competition.directory
     clubs = pd.read_parquet(season_root / "clubs.parquet")
     by_name = clubs.set_index("club_name")["club_id"].astype(str).to_dict()
     client = BeSoccerClient(cache_dir=raw_root, min_delay=args.min_delay, max_delay=args.max_delay)

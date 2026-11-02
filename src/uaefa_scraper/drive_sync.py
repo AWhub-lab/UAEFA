@@ -374,7 +374,12 @@ def publish_project_snapshot(
     uploaded = skipped = 0
     for local_root, remote_parent, prefix, allowed_paths in (
         (processed_current, ensure_path(service, current_id, ["tables"]), "tables", None),
-        (external, ensure_path(service, current_id, ["besoccer"]), "besoccer", {"player_profiles_validated.parquet", "teams.parquet"}),
+        (
+            external,
+            ensure_path(service, current_id, ["besoccer"]),
+            "besoccer",
+            {"player_profiles_validated.parquet", "player_career.parquet", "teams.parquet"},
+        ),
         (media_bundle.parent, current_id, "runtime", {media_bundle.name}),
     ):
         if not local_root.exists():
@@ -487,6 +492,24 @@ def sync_competition_snapshot(
         remote_hashes,
         local_hashes,
     )
+
+    # Enrichment is optional: competitions can be published before their
+    # BeSoccer crosswalk is complete. When present, it stays separate from
+    # UAEFA tables and is only joined after local identity validation.
+    besoccer_id = find_path(
+        service,
+        settings.root_folder_id,
+        ["02_Processed data", "competitions", directory, "current", "besoccer"],
+    )
+    if besoccer_id:
+        downloaded += download_tree(
+            service,
+            besoccer_id,
+            project_root / "data" / "external" / "besoccer" / directory,
+            "besoccer",
+            remote_hashes,
+            local_hashes,
+        )
 
     media_folder = find_path(
         service, settings.root_folder_id, ["03_Assets", "competitions", directory]

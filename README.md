@@ -140,6 +140,34 @@ exist locally. The visible `Refresh data` button checks Drive again and then
 clears Streamlit's data cache. The report is served to the user's browser only
 after they choose the in-app download button.
 
+### Validated BeSoccer enrichment
+
+UAEFA remains the authoritative source for fixtures, match reports, current
+competition statistics, official birth date, registration category and official
+nationality. BeSoccer is an optional enrichment layer: individual Elo and its
+history, market value and its history, physical profile, secondary positions
+and historical club career.
+
+The enrichment must never be joined by name alone. For each competition, first
+approve a UAEFA-to-BeSoccer team mapping, then run the following cache-first
+sequence. Every command accepts `first`, `second`, `third` or `u23`.
+
+```bash
+python3 scripts/download_besoccer_squads.py --competition second --mapping path/to/approved_mapping.json
+python3 scripts/cross_besoccer_squads.py --competition second
+python3 scripts/download_besoccer_profiles.py --competition second
+python3 scripts/validate_besoccer_crosswalk.py --competition second
+python3 scripts/download_besoccer_pending_profiles.py --competition second
+python3 scripts/resolve_besoccer_pending_profiles.py --competition second
+python3 scripts/backfill_besoccer_careers.py --competition second
+python3 scripts/publish_competition_to_drive.py second
+```
+
+Profile requests are sequential, cached and rate-limited. The career backfill
+reads only previously cached profiles and makes no network request. The app
+loads only records validated against the UAEFA date of birth; conflicting or
+ambiguous candidates remain excluded.
+
 `access.password` is optional for a local working copy, but required for the
 shared deployment. It is never stored in GitHub or Google Drive; changing the
 secret immediately changes the password required by the app.
