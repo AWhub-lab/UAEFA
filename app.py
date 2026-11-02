@@ -858,7 +858,9 @@ def identity_chips(player: pd.Series, compact: bool = False) -> str:
         "uae born": L("Nacido en EAU", "UAE born"),
     }.get(str(player.get("nationality_category", "")).strip().lower())
     if affiliation:
-        return f"<span class='chip nat' title='Estatus oficial UAEFA: {escape(affiliation)}'>{UAE_FLAG} {escape(affiliation)}</span>"
+        is_uae_nationality = label.strip().lower() in {"united arab emirates", "u a e", "uae"}
+        uae_chip = f"<span class='chip nat' title='Estatus oficial UAEFA: {escape(affiliation)}'>{UAE_FLAG} {escape(affiliation)}</span>"
+        return uae_chip if is_uae_nationality else f"{uae_chip}{country_chip}"
     return country_chip
 
 
@@ -2447,7 +2449,7 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
 
                     - The photo and squad number identify the player in official match reports.
                     - The border and soft shading identify the role: goalkeeper, defender, midfielder or attacker.
-                    - The UAE flag label appears only for `UAE Citizen`, `Citizen Child` or `UAE Born`; other players display their published nationality flag.
+                    - The UAE flag label appears only for `UAE Citizen`, `Citizen Child` or `UAE Born`. When their published nationality is different, both flags remain visible.
                     - Birth year displays the official year and age calculated using the visible matchday cut-off date.
                     - The coloured circle is the **individual Elo** when it is published and the identity match is validated: red is the lower range and green the upper range among available Elo values.
                     - `PJ`, `MIN`, `Goles`, `TA` and `TR` are official UAEFA matches played, minutes, goals, yellow cards and red cards.
@@ -2455,7 +2457,7 @@ def render_players(data: dict[str, pd.DataFrame], player_totals: pd.DataFrame, c
 
                     - La foto y el dorsal identifican al jugador en las actas oficiales.
                     - El borde y sombreado suave indican su posición: portero, defensa, mediocampista o atacante.
-                    - La etiqueta con bandera EAU solo aparece en `UAE Citizen`, `Citizen Child` o `UAE Born`; el resto muestra la bandera de su nacionalidad publicada.
+                    - La etiqueta con bandera EAU solo aparece en `UAE Citizen`, `Citizen Child` o `UAE Born`. Si su nacionalidad publicada es distinta, se ven ambas banderas.
                     - El nacimiento muestra el año oficial y la edad calculada con la fecha de corte de la jornada visible.
                     - El círculo de color es el **Elo individual** cuando está publicado y el cruce de identidad está validado: rojo representa el tramo inferior y verde el superior dentro de los Elo disponibles.
                     - `PJ`, `MIN`, `Goles`, `TA` y `TR` son partidos jugados, minutos, goles, tarjetas amarillas y tarjetas rojas oficiales UAEFA.
