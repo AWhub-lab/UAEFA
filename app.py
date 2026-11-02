@@ -133,7 +133,9 @@ except DriveSyncError:
 DATA_ROOT = SEASON_DATA_ROOT / "current" if (SEASON_DATA_ROOT / "current").exists() else SEASON_DATA_ROOT / "week_01"
 EXTERNAL_ROOT = PROJECT_ROOT / "data" / "external" / "besoccer" / ACTIVE_COMPETITION.directory
 BRAND_ROOT = PROJECT_ROOT / "data" / "assets" / "brand"
-COMPETITION_REPORT_PATH = PROJECT_ROOT / "output" / "pdf" / ACTIVE_COMPETITION.report_path
+_LOCAL_REPORT_PATH = PROJECT_ROOT / "output" / "pdf" / ACTIVE_COMPETITION.report_path
+_SYNCED_REPORT_PATH = PROJECT_ROOT / "data" / "assets" / ACTIVE_COMPETITION.directory / "reports" / ACTIVE_COMPETITION.report_path
+COMPETITION_REPORT_PATH = _LOCAL_REPORT_PATH if _LOCAL_REPORT_PATH.exists() else _SYNCED_REPORT_PATH
 
 SEASON = ACTIVE_COMPETITION.season
 PAGES = {

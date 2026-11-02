@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Create the English, board-ready UAE First Division category report."""
+"""Create an English, board-ready Al Wasl report for a UAEFA competition."""
 
 from __future__ import annotations
 
+import argparse
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -18,11 +20,12 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data" / "processed" / "first_division_2026_2027" / "current"
-TMP = ROOT / "tmp" / "board_category_report"
-OUTPUT = ROOT / "output" / "pdf" / "uae_first_division_category_board_report_en.pdf"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.uaefa_scraper.competitions import COMPETITIONS, Competition, get_competition
+
 BRAND = ROOT / "data" / "assets" / "brand" / "al_wasl.png"
 
 YELLOW, GOLD, GREEN, DEEP, INK = "#FFD21F", "#B98400", "#0B4A33", "#071D15", "#11151A"
@@ -31,6 +34,20 @@ POSITIONS = ["GK", "D", "M", "A"]
 POSITION_LABELS = {"GK": "Goalkeepers", "D": "Defenders", "M": "Midfielders", "A": "Attackers"}
 POSITION_COLORS = {"GK": "#D69B16", "D": "#3277C7", "M": "#1B9B63", "A": "#D34F60"}
 AGE_BANDS = ["<=20", "21-23", "24-27", "28-31", "32+"]
+
+
+def configure_competition(key: str) -> Competition:
+    """Set the paths and wording for one competition report run."""
+    competition = get_competition(key)
+    global REPORT_COMPETITION, DATA, TMP, OUTPUT
+    REPORT_COMPETITION = competition
+    DATA = ROOT / "data" / "processed" / competition.directory / "current"
+    TMP = ROOT / "tmp" / f"board_category_report_{competition.directory}"
+    OUTPUT = ROOT / "output" / "pdf" / competition.report_path
+    return competition
+
+
+REPORT_COMPETITION = configure_competition("first")
 
 
 def age_at_cutoff(value: object, cutoff: pd.Timestamp) -> int | None:
@@ -248,11 +265,11 @@ def metric(value: str, label: str, s: dict[str, ParagraphStyle]) -> Table:
 
 def footer(canvas, doc) -> None:
     canvas.saveState(); canvas.setStrokeColor(colors.HexColor(YELLOW)); canvas.setLineWidth(2); canvas.line(1.7*cm, 1.25*cm, A4[0]-1.7*cm, 1.25*cm)
-    canvas.setFillColor(colors.HexColor(MUTED)); canvas.setFont("Helvetica", 7.5); canvas.drawString(1.7*cm, .82*cm, "Al Wasl Football Intelligence | UAE First Division 2026/27")
+    canvas.setFillColor(colors.HexColor(MUTED)); canvas.setFont("Helvetica", 7.5); canvas.drawString(1.7*cm, .82*cm, f"Al Wasl Football Intelligence | {REPORT_COMPETITION.name} {REPORT_COMPETITION.season}")
     canvas.drawRightString(A4[0]-1.7*cm, .82*cm, str(doc.page)); canvas.restoreState()
 
 
-def full_cover(canvas, doc, back: bool = False) -> None:
+def full_cover(canvas, doc, back: bool = False, latest_week: int | None = None, cutoff: pd.Timestamp | None = None) -> None:
     """Draw a true full-bleed cover, rather than a card placed on an A4 page."""
     width, height = A4
     canvas.saveState()
@@ -266,11 +283,13 @@ def full_cover(canvas, doc, back: bool = False) -> None:
         canvas.setFillColor(colors.HexColor(YELLOW)); canvas.setFont("Helvetica-Bold", 10)
         canvas.drawCentredString(width / 2, height / 2 + .95 * cm, "AL WASL FOOTBALL INTELLIGENCE")
         canvas.setFillColor(colors.white); canvas.setFont("Helvetica-Bold", 28)
-        canvas.drawCentredString(width / 2, height / 2 + .10 * cm, "UAE FIRST DIVISION")
+        canvas.drawCentredString(width / 2, height / 2 + .10 * cm, REPORT_COMPETITION.name.upper())
         canvas.drawCentredString(width / 2, height / 2 - .88 * cm, "CATEGORY INTELLIGENCE REPORT")
         canvas.setFillColor(colors.HexColor("#D5DDD8")); canvas.setFont("Helvetica", 11)
         canvas.drawCentredString(width / 2, height / 2 - 1.75 * cm, "A board-ready view of squad structure, player age and registration context")
-        canvas.drawCentredString(width / 2, height / 2 - 2.38 * cm, "Season 2026/27 | Matchday 7 | Data cut-off 18 Oct 2026")
+        cut_off_label = cutoff.strftime("%d %b %Y") if cutoff is not None else "Current snapshot"
+        matchday_label = f"Matchday {latest_week}" if latest_week is not None else "Current matchday"
+        canvas.drawCentredString(width / 2, height / 2 - 2.38 * cm, f"Season {REPORT_COMPETITION.season} | {matchday_label} | Data cut-off {cut_off_label}")
     canvas.restoreState()
 
 
@@ -357,14 +376,14 @@ def build() -> Path:
     contents.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#F7F7F2")), ("GRID", (0,0), (-1,-1), .5, colors.HexColor(LINE)), ("FONTNAME", (0,0), (-1,-1), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 10), ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor(GOLD)), ("ALIGN", (2,0), (2,-1), "RIGHT"), ("VALIGN", (0,0), (-1,-1), "MIDDLE"), ("LEFTPADDING", (0,0), (-1,-1), 10), ("RIGHTPADDING", (0,0), (-1,-1), 10)]))
     story += [Paragraph("A visual guide to the competition's player register, prepared from the current local UAEFA snapshot.", s["body"]), Spacer(0,.5*cm), contents, Spacer(0,.6*cm), Paragraph("Reading note", s["h2"]), Paragraph("The report uses the UAEFA registration fields as published. Percentages accompany the absolute count so team profiles remain comparable despite different squad-pool sizes. All bar charts use rounded ends to improve scanability and retain a consistent visual language.", s["body"]), PageBreak()]
 
-    story += [Paragraph("Competition at a glance", s["h1"]), Paragraph("The current data pool combines official player records with the latest available First Division match reports. These cards set the context before the deeper age, registration and club-level pages.", s["body"])]
+    story += [Paragraph("Competition at a glance", s["h1"]), Paragraph(f"The current data pool combines official player records with the latest available {REPORT_COMPETITION.name} match reports. These cards set the context before the deeper age, registration and club-level pages.", s["body"])]
     cards = [metric(str(total), "REGISTERED PLAYERS", s), metric(str(teams["club_name"].nunique()), "CLUBS REPRESENTED", s), metric(str(len(matches)), "MATCHES AVAILABLE", s), metric(str(latest_week), "LATEST MATCHDAY", s), metric(f"{dated['age'].median():.1f}", "MEDIAN AGE", s), metric(f"{professional/total:.0%}", "PROFESSIONAL", s), metric(f"{amateur/total:.0%}", "AMATEUR", s), metric(f"{uae/total:.0%}", "EXPLICITLY UAE-LABELLED CATEGORIES", s)]
     story += [Table([cards[:4], cards[4:]], colWidths=[4.25*cm]*4, rowHeights=[2.15*cm,2.15*cm]), Spacer(0,.55*cm), Paragraph("Role mix", s["h2"])]
     role_cards=[]
     for pos in POSITIONS:
         count = int(players["position"].eq(pos).sum()); mean = dated.loc[dated["position"].eq(pos), "age"].mean()
         role_cards.append(metric(str(count), f"{POSITION_LABELS[pos].upper()} | {count/total:.0%} | MEAN AGE {mean:.1f}", s))
-    story += [Table([role_cards], colWidths=[4.25*cm]*4), Spacer(0,.45*cm), Paragraph("The category has complete official birth-date coverage in this local snapshot. Club assignment follows each player's latest available First Division match report, maintaining a competition-specific view when a federation profile has since changed.", s["body"]), PageBreak()]
+    story += [Table([role_cards], colWidths=[4.25*cm]*4), Spacer(0,.45*cm), Paragraph(f"The category has complete official birth-date coverage in this local snapshot. Club assignment follows each player's latest available {REPORT_COMPETITION.name} match report, maintaining a competition-specific view when a federation profile has since changed.", s["body"]), PageBreak()]
 
     story += [Paragraph("Age architecture", s["h1"]), Paragraph("The upper chart shows the player pool by age band. The lower chart puts the age profile of each playing line side by side, helping an analyst distinguish development, prime and experience concentration before filtering individual targets.", s["body"]), Image(str(charts["age"]), width=17.0*cm, height=7.55*cm), Spacer(0,.25*cm), Image(str(charts["position_age"]), width=17.0*cm, height=7.55*cm), Spacer(0,.2*cm), Image(str(charts["heatmap"]), width=17.0*cm, height=8.25*cm), PageBreak()]
 
@@ -406,17 +425,28 @@ def build() -> Path:
             Image(str(chart), width=17.0*cm, height=9.95*cm), Spacer(0,.18*cm), rankings,
         ]
 
-    story += [PageBreak(), Paragraph("Methodology", s["h1"]), Paragraph(f"Statistical cut-off: {cutoff.strftime('%d %B %Y')}. Available First Division matches: {len(matches)}. Latest matchday: {latest_week}. Unit of analysis: a player in the local UAEFA First Division dataset. Player club assignment follows the latest available match-report appearance. Age is calculated at the stated cut-off using UAEFA's official published date of birth. Minutes are calculated from starting status and recorded substitution timings, using 90 minutes when a recorded player has no exit time. This report is descriptive and should be combined with match context, video and qualitative recruitment assessment.", s["body"]), PageBreak(), Spacer(0, .1*cm)]
+    story += [PageBreak(), Paragraph("Methodology", s["h1"]), Paragraph(f"Statistical cut-off: {cutoff.strftime('%d %B %Y')}. Available {REPORT_COMPETITION.name} matches: {len(matches)}. Latest matchday: {latest_week}. Unit of analysis: a player in the local UAEFA {REPORT_COMPETITION.name} dataset. Player club assignment follows the latest available match-report appearance. Age is calculated at the stated cut-off using UAEFA's official published date of birth. Minutes are calculated from starting status and recorded substitution timings, using 90 minutes when a recorded player has no exit time. This report is descriptive and should be combined with match context, video and qualitative recruitment assessment.", s["body"]), PageBreak(), Spacer(0, .1*cm)]
+
+    # Page count is deterministic: cover, contents, five overview/ranking pages,
+    # one page per club, methodology and final back cover.
+    back_cover_page = len(groups) + 9
+
+    def first_page(canvas, document) -> None:
+        full_cover(canvas, document, latest_week=latest_week, cutoff=cutoff)
 
     def later_page(canvas, document) -> None:
-        if document.page == 24:
-            full_cover(canvas, document, back=True)
+        if document.page == back_cover_page:
+            full_cover(canvas, document, back=True, latest_week=latest_week, cutoff=cutoff)
         else:
             footer(canvas, document)
 
-    doc.build(story, onFirstPage=full_cover, onLaterPages=later_page)
+    doc.build(story, onFirstPage=first_page, onLaterPages=later_page)
     return OUTPUT
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    args = parser.parse_args()
+    configure_competition(args.competition)
     print(build())

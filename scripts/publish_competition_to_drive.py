@@ -18,6 +18,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from uaefa_scraper.competitions import get_competition
 from uaefa_scraper.drive_sync import (
     DriveSyncError,
     ensure_path,
@@ -40,7 +41,7 @@ DATASETS = {
 }
 
 
-def build_media_bundle(directory: str) -> Path | None:
+def build_media_bundle(competition_key: str, directory: str) -> Path | None:
     """Package one competition's media for fast hosted delivery.
 
     Club crests retain their source files. Player portraits are resized and
@@ -51,26 +52,41 @@ def build_media_bundle(directory: str) -> Path | None:
 
     asset_root = PROJECT_ROOT / "data" / "assets" / directory
     sources = sorted(path for path in asset_root.rglob("*") if path.is_file()) if asset_root.exists() else []
-    if not sources:
+    report = PROJECT_ROOT / "output" / "pdf" / get_competition(competition_key).report_path
+    if not sources and not report.exists():
         return None
     bundle = PROJECT_ROOT / "tmp" / f"{directory}_media.zip"
     bundle.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        written: set[str] = set()
         for source in sources:
             relative = source.relative_to(asset_root)
             if relative.parts and relative.parts[0] == "players":
+                archive_name = relative.with_suffix(".jpg").as_posix()
+                # A previous Drive sync may have produced a compact JPEG next
+                # to the original PNG. Keep the first valid portrait only.
+                if archive_name in written:
+                    continue
                 try:
                     with Image.open(source) as image:
                         image = image.convert("RGB")
                         image.thumbnail((300, 400), Image.Resampling.LANCZOS)
                         payload = io.BytesIO()
                         image.save(payload, format="JPEG", quality=82, optimize=True, progressive=True)
-                    archive.writestr(relative.with_suffix(".jpg").as_posix(), payload.getvalue())
+                    archive.writestr(archive_name, payload.getvalue())
+                    written.add(archive_name)
                     continue
                 except (OSError, ValueError):
                     # Preserve an unusual source file instead of dropping a portrait.
                     pass
-            archive.write(source, relative.as_posix())
+            archive_name = relative.as_posix()
+            if archive_name not in written:
+                archive.write(source, archive_name)
+                written.add(archive_name)
+        if report.exists():
+            # The app extracts this beneath the competition asset folder, then
+            # falls back to it when a hosted runtime has no local PDF output.
+            archive.write(report, (Path("reports") / report.name).as_posix())
     return bundle
 
 
@@ -98,7 +114,7 @@ def main() -> int:
 
     directory = DATASETS[args.competition]
     processed = PROJECT_ROOT / "data" / "processed" / directory / "current"
-    media_bundle = build_media_bundle(directory)
+    media_bundle = build_media_bundle(args.competition, directory)
     raw_bundle = build_raw_bundle(directory) if args.include_raw else None
     summary_path = processed / "summary.json"
     if not summary_path.exists():
