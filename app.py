@@ -503,7 +503,14 @@ def build_player_totals(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     reference_date = data["matches"]["match_date"].max() if not data["matches"].empty else None
     merged["Edad"] = merged["birth_date_official"].map(lambda value: age_at_date(value, reference_date))
     merged["Nacimiento"] = merged["birth_date_official"].map(lambda value: birth_year_age_label(value, reference_date))
-    player_elo = pd.to_numeric(merged.get("elo_current"), errors="coerce")
+    # New official competitions can load before their BeSoccer crosswalk has
+    # any validated individual Elo values. Keep a Series in that case so the
+    # percentile calculation stays vectorised instead of receiving a scalar.
+    player_elo = (
+        pd.to_numeric(merged["elo_current"], errors="coerce")
+        if "elo_current" in merged.columns
+        else pd.Series(float("nan"), index=merged.index, dtype=float)
+    )
     merged["elo_percentile"] = player_elo.rank(pct=True)
     return merged
 
@@ -868,6 +875,13 @@ div[class*="st-key-crumb-"] .stButton>button:hover{background:rgba(255,210,31,.1
 .scope-panel span{font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--yellow)}
 .scope-panel b{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
 div[data-testid="stElementContainer"]:has(.scope-panel) + div [data-baseweb="select"]>div{min-height:54px;border:2px solid var(--yellow)!important;background:linear-gradient(90deg,rgba(255,210,31,.13),var(--s1))!important;box-shadow:0 9px 24px rgba(0,0,0,.3)}
+/* ---------- competition selector */
+.competition-switcher{display:flex;align-items:center;gap:.55rem;min-height:48px;padding:.45rem .6rem;margin-bottom:.35rem;border:1px solid rgba(174,120,0,.38);border-radius:12px 12px 8px 8px;background:linear-gradient(135deg,#fffaf0 0%,#fff 74%);box-shadow:0 8px 22px rgba(112,77,3,.09)}
+.competition-switcher img{width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 4px 7px rgba(78,57,8,.2))}
+.competition-switcher span{display:block;font-size:.59rem;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--yellow-d)}
+.competition-switcher b{display:block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-size:1.03rem;letter-spacing:.055em;text-transform:uppercase;color:var(--text)}
+div[class*="st-key-competition_key"] [data-baseweb="select"]>div{min-height:44px;border:2px solid var(--yellow)!important;background:linear-gradient(90deg,rgba(255,210,31,.15),var(--s1))!important;box-shadow:0 8px 20px rgba(112,77,3,.10)}
+div[class*="st-key-competition_key"] [data-baseweb="select"] span{font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;letter-spacing:.045em}
 /* ---------- page banner */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.3rem 0 .6rem;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .crumbs span.sep{color:var(--yellow)}.crumbs b{color:var(--text);font-weight:600}
@@ -2511,15 +2525,20 @@ def main() -> None:
     if st.session_state.get("matchday") not in available_weeks:
         # The day-to-day operational view opens on the latest completed matchday.
         st.session_state["matchday"] = available_weeks[-1]
-    competition_control, navigation, scope_control, refresh, language_control = st.columns([1.65, 3.35, 1.75, 1.2, 1.05], gap="small", vertical_alignment="bottom")
-    competition_control.selectbox(
-        "Competition",
-        list(COMPETITIONS),
-        key="competition_key",
-        format_func=lambda key: COMPETITIONS[key].name,
-        on_change=reset_competition_context,
-        label_visibility="collapsed",
-    )
+    competition_control, navigation, scope_control, refresh, language_control = st.columns([1.85, 3.15, 1.75, 1.2, 1.05], gap="small", vertical_alignment="bottom")
+    with competition_control:
+        html(
+            f"<div class='competition-switcher'><img src='{brand_uri('al_wasl.png')}' alt='Al Wasl'>"
+            f"<div><span>Competition hub</span><b>{escape(ACTIVE_COMPETITION.name)}</b></div></div>"
+        )
+        st.selectbox(
+            "Competition",
+            list(COMPETITIONS),
+            key="competition_key",
+            format_func=lambda key: COMPETITIONS[key].name,
+            on_change=reset_competition_context,
+            label_visibility="collapsed",
+        )
     page = navigation.segmented_control(
         "Navegación", list(PAGES), key="page", label_visibility="collapsed",
         format_func=lambda name: f"{PAGES[name][1]} {t(name)}",
