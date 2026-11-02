@@ -735,6 +735,12 @@ def brand_uri(name: str) -> str:
     return image_uri(str(BRAND_ROOT / name), "crest")
 
 
+def competition_logo_uri() -> str:
+    """Return the local identity mark for the active competition."""
+    logo_path = PROJECT_ROOT / "assets" / "competitions" / ACTIVE_COMPETITION.logo_filename
+    return image_uri(str(logo_path), "crest") if logo_path.exists() else brand_uri("al_wasl.png")
+
+
 def crest(club: pd.Series | None, size: int = 36) -> str:
     uri = uri_from(club.get("crest_file"), "crest") if club is not None else None
     if not uri:
@@ -876,12 +882,14 @@ div[class*="st-key-crumb-"] .stButton>button:hover{background:rgba(255,210,31,.1
 .scope-panel b{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:1rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text)}
 div[data-testid="stElementContainer"]:has(.scope-panel) + div [data-baseweb="select"]>div{min-height:54px;border:2px solid var(--yellow)!important;background:linear-gradient(90deg,rgba(255,210,31,.13),var(--s1))!important;box-shadow:0 9px 24px rgba(0,0,0,.3)}
 /* ---------- competition selector */
-.competition-switcher{display:flex;align-items:center;gap:.55rem;min-height:48px;padding:.45rem .6rem;margin-bottom:.35rem;border:1px solid rgba(174,120,0,.38);border-radius:12px 12px 8px 8px;background:linear-gradient(135deg,#fffaf0 0%,#fff 74%);box-shadow:0 8px 22px rgba(112,77,3,.09)}
-.competition-switcher img{width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 4px 7px rgba(78,57,8,.2))}
+.competition-switcher{display:flex;align-items:center;gap:.7rem;min-height:54px;padding:.45rem .7rem;margin-bottom:.35rem;border:1px solid rgba(174,120,0,.38);border-radius:12px 12px 8px 8px;background:linear-gradient(135deg,#fff8e7 0%,#fff 74%);box-shadow:0 8px 22px rgba(112,77,3,.09)}
+.competition-switcher img{width:44px;height:44px;object-fit:contain;filter:drop-shadow(0 4px 7px rgba(78,57,8,.2))}
 .competition-switcher span{display:block;font-size:.59rem;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--yellow-d)}
-.competition-switcher b{display:block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-size:1.03rem;letter-spacing:.055em;text-transform:uppercase;color:var(--text)}
+.competition-switcher b{display:block;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-size:1.08rem;letter-spacing:.055em;text-transform:uppercase;color:var(--text)}
 div[class*="st-key-competition_key"] [data-baseweb="select"]>div{min-height:44px;border:2px solid var(--yellow)!important;background:linear-gradient(90deg,rgba(255,210,31,.15),var(--s1))!important;box-shadow:0 8px 20px rgba(112,77,3,.10)}
 div[class*="st-key-competition_key"] [data-baseweb="select"] span{font-family:'Barlow Condensed',sans-serif!important;font-weight:700!important;letter-spacing:.045em}
+.navigation-row{display:flex;align-items:center;gap:.7rem;padding:.5rem .75rem;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.72);box-shadow:0 8px 22px rgba(17,19,21,.04)}
+.navigation-row span{flex:0 0 auto;font-size:.61rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--yellow-d)}
 /* ---------- page banner */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.3rem 0 .6rem;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .crumbs span.sep{color:var(--yellow)}.crumbs b{color:var(--text);font-weight:600}
@@ -1422,7 +1430,14 @@ def render_overview(data: dict[str, pd.DataFrame], standings: pd.DataFrame, play
     standings_table(standings, club_map)
     section("Evolución de posiciones", "Top 5 de la jornada por defecto · compara hasta cinco equipos")
     render_position_evolution(data, standings, club_map)
-    render_player_rankings(data, player_totals, club_map, key_prefix="league_ranking")
+    render_player_rankings(
+        data,
+        player_totals,
+        club_map,
+        title=f"{ACTIVE_COMPETITION.name} · {t('Rankings')}",
+        hint=f"{ACTIVE_COMPETITION.name} · {t('Rendimiento individual · foto, club, posición, nacimiento y métrica oficial UAEFA')}",
+        key_prefix=f"{ACTIVE_COMPETITION.key}_league_ranking",
+    )
 
 
 def match_label(match: pd.Series) -> str:
@@ -2502,7 +2517,7 @@ def reset_competition_context() -> None:
     """Clear selection-specific UI state before Streamlit loads another league."""
     st.session_state.update(
         page="Clasificación", matchday=None, player_id=None, player_origin=None,
-        player_scroll_top=True, shown=GRID_PAGE,
+        player_picker=None, club_id=None, player_scroll_top=True, shown=GRID_PAGE,
     )
     st.cache_data.clear()
 
@@ -2525,11 +2540,11 @@ def main() -> None:
     if st.session_state.get("matchday") not in available_weeks:
         # The day-to-day operational view opens on the latest completed matchday.
         st.session_state["matchday"] = available_weeks[-1]
-    competition_control, navigation, scope_control, refresh, language_control = st.columns([1.85, 3.15, 1.75, 1.2, 1.05], gap="small", vertical_alignment="bottom")
+    competition_control, scope_control, refresh, language_control = st.columns([2.2, 2.55, 1.25, 1.0], gap="small", vertical_alignment="bottom")
     with competition_control:
         html(
-            f"<div class='competition-switcher'><img src='{brand_uri('al_wasl.png')}' alt='Al Wasl'>"
-            f"<div><span>Competition hub</span><b>{escape(ACTIVE_COMPETITION.name)}</b></div></div>"
+            f"<div class='competition-switcher'><img src='{competition_logo_uri()}' alt='{escape(ACTIVE_COMPETITION.name)}'>"
+            f"<div><span>Active competition</span><b>{escape(ACTIVE_COMPETITION.name)}</b></div></div>"
         )
         st.selectbox(
             "Competition",
@@ -2539,8 +2554,9 @@ def main() -> None:
             on_change=reset_competition_context,
             label_visibility="collapsed",
         )
-    page = navigation.segmented_control(
-        "Navegación", list(PAGES), key="page", label_visibility="collapsed",
+    html("<div class='navigation-row'><span>Explore competition</span></div>")
+    page = st.segmented_control(
+        "Navigation", list(PAGES), key="page", label_visibility="collapsed",
         format_func=lambda name: f"{PAGES[name][1]} {t(name)}",
     )
     with scope_control:
