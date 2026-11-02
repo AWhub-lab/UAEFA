@@ -25,6 +25,27 @@ class DriveSyncError(RuntimeError):
     """Raised when Drive synchronization cannot be completed safely."""
 
 
+def load_project_env(path: Path) -> None:
+    """Load simple local KEY=VALUE entries without adding a runtime dependency.
+
+    Deployment secrets still come from Streamlit. This helper exists solely for
+    the local owner-side publisher and never logs the values it reads.
+    """
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
 @dataclass(frozen=True)
 class DriveSettings:
     root_folder_id: str

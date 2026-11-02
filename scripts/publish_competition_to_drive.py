@@ -14,13 +14,13 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.drive_sync import (
     DriveSyncError,
     ensure_path,
+    load_project_env,
     publisher_service_from_oauth,
     publish_tree,
     sha256_file,
@@ -28,6 +28,8 @@ from uaefa_scraper.drive_sync import (
     upload_bytes,
     upload_file,
 )
+
+load_project_env(PROJECT_ROOT / ".env")
 
 
 DATASETS = {

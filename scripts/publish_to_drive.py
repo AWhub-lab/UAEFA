@@ -12,16 +12,18 @@ import json
 import sys
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.drive_sync import (
     DriveSyncError,
+    load_project_env,
     publish_project_snapshot,
     publisher_service_from_oauth,
     settings_from_mapping,
 )
+
+load_project_env(PROJECT_ROOT / ".env")
 
 
 def main() -> int:
