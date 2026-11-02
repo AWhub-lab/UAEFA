@@ -736,8 +736,17 @@ def brand_uri(name: str) -> str:
 
 
 def competition_logo_uri() -> str:
-    """Return the local identity mark for the active competition."""
-    logo_path = PROJECT_ROOT / "assets" / "competitions" / ACTIVE_COMPETITION.logo_filename
+    """Return the local identity mark, including during a partial Streamlit reload."""
+    fallback_logos = {
+        "first": "first_division_league.png",
+        "second": "second_division_league.png",
+        "third": "third_division_league.png",
+        "u23": "pro_league_u23.png",
+    }
+    filename = getattr(ACTIVE_COMPETITION, "logo_filename", fallback_logos.get(ACTIVE_COMPETITION.key))
+    if not filename:
+        return brand_uri("al_wasl.png")
+    logo_path = PROJECT_ROOT / "assets" / "competitions" / filename
     return image_uri(str(logo_path), "crest") if logo_path.exists() else brand_uri("al_wasl.png")
 
 
