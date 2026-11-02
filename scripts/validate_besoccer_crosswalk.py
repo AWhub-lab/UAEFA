@@ -7,7 +7,9 @@ requests and will downgrade a link if both sources publish different DOBs.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -17,6 +19,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from uaefa_scraper.competitions import COMPETITIONS, get_competition
+
+
+VALIDATED_IDENTITIES = {
+    "confirmed_name_club_and_dob",
+    "accepted_dob_not_published_by_besoccer",
+}
 
 
 def main() -> None:
@@ -52,6 +60,33 @@ def main() -> None:
 
     output = besoccer_root / "player_crosswalk_validated.parquet"
     crosswalk.to_parquet(output, index=False)
+    validated_ids = set(
+        crosswalk.loc[crosswalk["identity_validation"].isin(VALIDATED_IDENTITIES), "uaefa_player_id"].astype(str)
+    )
+    validated_profiles = besoccer_profiles[
+        besoccer_profiles["uaefa_player_id"].astype(str).isin(validated_ids)
+    ].copy()
+    validated_profiles.to_parquet(besoccer_root / "player_profiles_validated.parquet", index=False)
+
+    careers_path = besoccer_root / "player_career.parquet"
+    career_rows = 0
+    if careers_path.exists():
+        careers = pd.read_parquet(careers_path)
+        careers = careers[careers["uaefa_player_id"].astype(str).isin(validated_ids)].copy()
+        careers.to_parquet(careers_path, index=False)
+        career_rows = len(careers)
+
+    summary = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "validated_profiles": len(validated_profiles),
+        "profiles_with_elo": int(validated_profiles["elo_current"].notna().sum()),
+        "career_rows": career_rows,
+        "dob_conflicts": int(crosswalk["identity_validation"].eq("do_not_use_dob_conflict").sum()),
+        "review_required": int(crosswalk["status"].eq("review").sum()),
+    }
+    (besoccer_root / "player_profiles_validated_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(
         {
             "rows": len(crosswalk),
@@ -59,6 +94,7 @@ def main() -> None:
             "accepted_dob_not_published_by_besoccer": int(crosswalk["identity_validation"].eq("accepted_dob_not_published_by_besoccer").sum()),
             "dob_conflicts": int(crosswalk["identity_validation"].eq("do_not_use_dob_conflict").sum()),
             "review_required": int(crosswalk["status"].eq("review").sum()),
+            "validated_profiles": len(validated_profiles),
             "output": str(output),
         }
     )

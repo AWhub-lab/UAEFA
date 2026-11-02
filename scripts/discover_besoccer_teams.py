@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,15 +19,21 @@ from uaefa_scraper.besoccer import (
     parse_competition_teams,
     team_crosswalk_candidates,
 )
+from uaefa_scraper.competitions import COMPETITIONS, get_competition
 
 
 def main() -> None:
-    processed = PROJECT_ROOT / "data" / "processed" / "first_division_2026_2027" / "current"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--competition", choices=sorted(COMPETITIONS), default="first")
+    parser.add_argument("--competition-url", required=True, help="Public BeSoccer competition teams or table URL.")
+    args = parser.parse_args()
+    competition = get_competition(args.competition)
+    processed = PROJECT_ROOT / "data" / "processed" / competition.directory / "current"
     raw_root = PROJECT_ROOT / "data" / "raw" / "besoccer" / "team_discovery"
     output_root = PROJECT_ROOT / "data" / "external" / "besoccer" / "team_discovery"
     # BeSoccer's season-specific teams view exposes the complete roster of
     # clubs, unlike the competition landing page's abbreviated standings list.
-    competition_url = f"{BASE_URL}/competition/teams/uae_second_league/2027"
+    competition_url = args.competition_url
     client = BeSoccerClient(cache_dir=raw_root, min_delay=8.0, max_delay=12.0)
     discovered = parse_competition_teams(client.get_html(competition_url))
     official = pd.read_parquet(processed / "clubs.parquet").to_dict("records")
@@ -42,7 +49,7 @@ def main() -> None:
         "proposals": proposals,
     }
     output_root.mkdir(parents=True, exist_ok=True)
-    path = output_root / "uae_second_league_2027.json"
+    path = output_root / f"{competition.key}_team_discovery.json"
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({key: value for key, value in result.items() if key != "proposals"}, ensure_ascii=False, indent=2))
     print(f"Saved team mapping proposals: {path}")
