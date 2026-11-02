@@ -853,8 +853,8 @@ def identity_chips(player: pd.Series, compact: bool = False) -> str:
         f"aria-label='Nacionalidad: {escape(label)}'>{country_flag(label)}</span>"
     )
     if label.strip().lower() in {"united arab emirates", "u a e", "uae"}:
-        return f"<span class='chip nat' title='Registro UAEFA · Nacionalidad: United Arab Emirates'>{UAE_FLAG} UAEFA</span>"
-    registry = f"<span class='chip nat'>{UAE_FLAG} UAEFA</span>"
+        return f"<span class='chip nat' title='Registro oficial UAEFA · Nacionalidad: United Arab Emirates'>{UAE_FLAG} UAEFA</span>"
+    registry = f"<span class='chip nat' title='Registro oficial UAEFA · La bandera contigua indica la nacionalidad publicada'>{UAE_FLAG} UAEFA</span>"
     return f"{registry}{country_chip}"
 
 
@@ -2249,7 +2249,7 @@ def render_player_profile(data: dict[str, pd.DataFrame], player: pd.Series, club
             player_career = player_career.sort_values(["seasons", "minutes", "matches"], ascending=False)
             section(L("Trayectoria por clubes", "Club career"), L("Historial publicado del jugador validado", "Published history for the validated player"))
             columns = [
-                ("club_name", L("Club", "Club"), ""), ("seasons", L("Temp.", "Seasons"), "num"),
+                ("club_name", L("Club", "Club"), ""), ("seasons", L("Temporadas jugadas", "Seasons played"), "num"),
                 ("matches", L("PJ", "Apps"), "num"), ("starts", L("Tit.", "Starts"), "num"),
                 ("minutes", L("Min.", "Minutes"), "num"), ("goals", L("Goles", "Goals"), "num"),
                 ("cards", L("Tarjetas", "Cards"), "num"),
