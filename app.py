@@ -385,6 +385,20 @@ def load_data(competition_key: str) -> dict[str, pd.DataFrame]:
         team_elo = pd.read_parquet(teams_path)[["club_id", "elo_current"]].drop_duplicates("club_id")
         team_elo["club_id"] = team_elo["club_id"].astype(str)
         frames["clubs"] = frames["clubs"].merge(team_elo, on="club_id", how="left")
+
+    # BeSoccer enrichment is incremental by competition. Keep its optional
+    # fields present even before a crosswalk has been validated so the shared
+    # catalogue and comparison UI work with official UAEFA-only snapshots.
+    for column in ("elo_current",):
+        if column not in frames["clubs"].columns:
+            frames["clubs"][column] = float("nan")
+    for column in (
+        "market_value_current_eur", "market_value_history_json", "elo_current",
+        "elo_history_json", "position_main", "positions_secondary_json",
+        "besoccer_nationality", "birth_place", "height_cm", "weight_kg", "source_url",
+    ):
+        if column not in frames["players"].columns:
+            frames["players"][column] = float("nan")
     return frames
 
 
